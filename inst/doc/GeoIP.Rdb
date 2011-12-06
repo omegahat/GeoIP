@@ -1,0 +1,116 @@
+<?xml version="1.0"?>
+<article xmlns:r="http://www.r-project.org"
+         xmlns:sh="http://www.shell.org"
+         xmlns:c="http://www.C.org"
+         xmlns:omg="http://www.omegahat.org"
+         xmlns:xi="http://www.w3.org/2003/XInclude">
+
+<articleinfo>
+
+<title></title>
+
+<author><firstname>Duncan</firstname><surname>Temple Lang</surname>
+  <affiliation><orgname>University of California at Davis</orgname>
+               <orgdiv>Department of Statistics</orgdiv>
+  </affiliation>
+</author>
+</articleinfo>
+
+<section>
+<title></title>
+
+<para>
+Get the code for the C API from 
+<ulink url="http://geolite.maxmind.com/download/geoip/api/c/"/>
+
+Get the binary form of the data 
+ <ulink url="http://www.maxmind.com/app/geolitecity"/>
+</para>
+
+<para>
+
+<r:code>
+library(RCIndex)
+col = genFunctionCollector()
+parseTU("/usr/local/include/GeoIP.h", col$update)
+</r:code>
+<r:code>
+funcs = col$funcs()
+grep("^GeoIP", names(funcs), value = TRUE)
+funcs = funcs[ grep("^GeoIP", names(funcs), value = TRUE) ]
+</r:code>
+
+</para>
+
+<para>
+The first thing we need to use any of the primary routines is 
+a pointer to a GeoIP object. This is the first argument to most routines.
+We create this with the function GeoIP_new.
+This takes an integer value which is a combination of flags that control how this is created.
+These flags are found in the GeoIPOptions enumeration.
+Let's get those
+
+<r:code>
+col = genEnumCollector()
+parseTU("/usr/local/include/GeoIP.h", col$update)
+col$enums()
+</r:code>
+
+</para>
+
+</section>
+
+<section>
+<title>Web Service Queries</title>
+<para>
+<ulink url="http://ipinfodb.com"/>
+provides several REST-based Web services.
+The results can be returned as XML or JSON.
+We can get the country name for an IP address;
+get the city and longitude and latitude;
+process multiple IP addresses.
+
+
+<r:function><![CDATA[
+getIPCountry =
+function(ip, ..., curl = getCurlHandle())
+{
+   txt = getForm("http://ipinfodb.com/ip_query_country.php", ip = ip, curl = curl, ...)
+   doc = xmlParse(txt, asText = TRUE)
+   r = xmlRoot(doc)
+   if(xmlValue(r[["Status"]]) == "OK") {
+     sapply(c("CountryCode", "CountryName"),
+             function(x)
+                 xmlValue(r[[x]]))
+   } else
+      stop("Failed")
+}
+]]></r:function>
+</para>
+
+<para>
+
+<r:function><![CDATA[
+getIPLocation =
+function(ip, ...., curl = getCurlHandle())
+{
+   multi = length(ip) > 1
+
+   u = if(multi)
+          "http://ipinfodb.com/ip_query2.php"
+       else
+          "http://ipinfodb.com/ip_query.php"
+   tt = getForm(u, ip = if(multi) paste(ip, collapse = ",") else ip, 
+                timezone = 'false')
+
+ #  xmlToDataFrame(xmlParse(tt, asText = TRUE))
+  
+  r = xmlRoot( xmlParse(tt, asText = TRUE) )
+  structure(xmlSApply(r, xmlValue), names = names(r))
+}
+]]></r:function>
+
+</para>
+
+</section>
+</article>

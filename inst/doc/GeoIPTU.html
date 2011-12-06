@@ -1,0 +1,1236 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml"><head><meta http-equiv="Content-Type" content="text/html; charset=ISO-8859-1">
+<title>Accessing the GeoIP library from R with Rffi and RGCCTranslationUnit</title><link rel="stylesheet" type="text/css" href="Class.css"></link><meta name="generator" content="DocBook XSL Stylesheets V1.76.1"></meta>
+<link xmlns="" rel="stylesheet" type="text/css" href="http://yui.yahooapis.com/2.8.0r4/build/tabview/assets/skins/sam/tabview.css">
+<script xmlns="" type="text/javascript" src="http://yui.yahooapis.com/2.8.0r4/build/yahoo-dom-event/yahoo-dom-event.js"></script>
+<script xmlns="" type="text/javascript" src="http://yui.yahooapis.com/2.8.0r4/build/element/element-min.js"></script>
+<script xmlns="" type="text/javascript" src="http://yui.yahooapis.com/2.8.0r4/build/tabview/tabview-min.js"></script>
+<script xmlns="" type="text/javascript" src="/Users/duncan/Classes/StatComputing/XDynDocs/inst/JavaScript/yahooTabUtils.js"></script>
+<script xmlns="" type="text/javascript" src="http://www.omegahat.org/DynDocs/JavaScript/toggleHidden.js"></script>
+</head><body class="yui-skin-sam">
+<script xmlns="" type="text/javascript"><!--
+var toggleCodeIds = [
+ 
+   "id36292758", 
+   "id36292766", 
+   "id36292769", 
+   "id36292780", 
+   "id36292805", 
+   "id36292815", 
+   "id36292837", 
+   "id36292845", 
+   "id36292864", 
+   "id36292869", 
+   "id36292901", 
+   "id36292910", 
+   "id36292915", 
+   "id36292920", 
+   "id36292935", 
+   "id36292958", 
+   "id36292962", 
+   "id36292970", 
+   "id36292979", 
+   "id36292984", 
+   "id36293013", 
+   "id36293061", 
+   "id36293083", 
+   "id36293088", 
+   "id36293096", 
+   "id36293130", 
+   "id36293145", 
+   "id36293149", 
+   "id36293190", 
+   "id36293239", 
+   "id36293247", 
+   "id36293264", 
+   "id36293268", 
+   "id36293276", 
+   "id36293289", 
+   "id36293316", 
+   "id36293361", 
+   "id36293365", 
+   "id36293392", 
+   "id36293396", 
+   "id36293406", 
+   "id36293417", 
+   "id36293443", 
+   "id36293459", 
+   "id36293472", 
+   "id36293477", 
+   "id36293484", 
+   "id36293489", 
+   "id36293496", 
+   "id36293505", 
+   "id36293509", 
+   "id36293521", 
+   "id36293525", 
+   "id36293541", 
+   "id36293544", 
+   "id36293549", 
+   "id36293553", 
+   "id36293557", 
+   "id36293562", 
+   "id36293566", 
+   "id36293573", 
+   "id36293578", 
+   "id36293586", 
+   "id36293590", 
+   "id36293599", 
+   "id36293603", 
+   "id36293614", 
+   "id36293618", 
+   "id36293634", 
+   "id36293638", 
+   "id36293644", 
+   "id36293649", 
+   "id36293653"
+];
+--></script><p xmlns=""></p>
+<div class="article" title="Accessing the GeoIP library from R with Rffi and RGCCTranslationUnit"><div class="titlepage"><div><div><h2 class="title"><a id="id36045955"></a>Accessing the GeoIP library from R with <a xmlns:omg="http://www.omegahat.org" xmlns:rwx="http://www.omegahat.org/RwxWidgets" xmlns="" href="http://www.omegahat.org/Rffi">Rffi</a>
+and <a xmlns:omg="http://www.omegahat.org" xmlns:rwx="http://www.omegahat.org/RwxWidgets" xmlns="" href="http://www.omegahat.org/RGCCTranslationUnit">RGCCTranslationUnit</a></h2></div><div><div class="author"><h3 class="author"><span class="firstname">Duncan</span> <span class="surname">Temple Lang</span></h3><div class="affiliation"><span class="orgname">University of California at Davis<br></br></span> <span class="orgdiv">Department of Statistics<br></br></span></div></div></div></div><hr></hr></div><div class="section" title="The GeoIP library"><div class="titlepage"><div><div><h2 class="title" style="clear: both"><a id="id36046376"></a>The GeoIP library</h2></div></div></div><p>
+The <a class="ulink" href="http://www.maxmind.com/app/geolitecity" target="_top">GeoIP library</a> from
+<a class="ulink" href="http://www.maxmind.com" target="_top">MaxMind</a> is an Open Source
+library that maps Internet Protocol addresses to estimated latitude and longitude,
+city and  county values. (<a class="ulink" href="http://www.maxmind.com" target="_top">MaxMind</a> also provides
+a more accurate commercial version of the database.)
+This ability to take an IP address and get its location is useful in many data analysis applications.
+One example is doing intrusion detection on network traffic packets.
+Another is drawing a map of visitors to a Web site by analyzing web logs.
+</p><p>
+Before we can use the GeoIP C library, we need to both understand the
+basic programming model/interface and then we need to build the bindings
+from R to the C code.
+We will use the <a xmlns:omg="http://www.omegahat.org" xmlns:rwx="http://www.omegahat.org/RwxWidgets" xmlns="" href="http://www.omegahat.org/RGCCTranslationUnit">RGCCTranslationUnit</a> package
+to programmatically obtain a description of the C-level API.
+We will use <a xmlns:omg="http://www.omegahat.org" xmlns:rwx="http://www.omegahat.org/RwxWidgets" xmlns="" href="http://www.omegahat.org/Rffi">Rffi</a> to invoke the routines.
+So all that remains before getting started is to get an understanding of the
+programming model.
+We can pass an IP address either as a number, a "dotted-quad" or by
+host name such as "cran.r-project.org". For each operation in the
+C library, there are 3 routines corresponding to these different
+input types. The names of the routines end in _ipnum, _addr and _name,
+respectively.
+We can use IP V6 or regular IP V4 addresses and the IPV6 routines
+have a _v6 suffix (following the _ipnum, _addr or _name).
+So to get the name of an IP address's country, we can use
+<i xmlns:s3="http://www.r-project.org/S3" xmlns:cpp="http://www.cplusplus.org" xmlns:xi="http://www.w3.org/2001/XInclude" xmlns=""><a href="c:routine(%22GeoIP_country_code_by_ipnum%22)">GeoIP_country_code_by_ipnum</a></i>,
+<i xmlns:s3="http://www.r-project.org/S3" xmlns:cpp="http://www.cplusplus.org" xmlns:xi="http://www.w3.org/2001/XInclude" xmlns=""><a href="c:routine(%22GeoIP_country_code_by_addr%22)">GeoIP_country_code_by_addr</a></i>
+or
+<i xmlns:s3="http://www.r-project.org/S3" xmlns:cpp="http://www.cplusplus.org" xmlns:xi="http://www.w3.org/2001/XInclude" xmlns=""><a href="c:routine(%22GeoIP_country_code_by_name%22)">GeoIP_country_code_by_name</a></i>
+</p><p>
+Each routine takes a pointer to the GeoIP "database" or agent
+and then the IP address in the appropriate form.
+To be able to use any of these routines, we must first
+create a GeoIP instance and obtain a reference to it.
+We do this with <i xmlns:s3="http://www.r-project.org/S3" xmlns:cpp="http://www.cplusplus.org" xmlns:xi="http://www.w3.org/2001/XInclude" xmlns=""><a href="c:routine(%22GeoIP_new%22)">GeoIP_new</a></i>.
+When we are finished with this, we can use
+<i xmlns:s3="http://www.r-project.org/S3" xmlns:cpp="http://www.cplusplus.org" xmlns:xi="http://www.w3.org/2001/XInclude" xmlns=""><a href="c:routine(%22GeoIP_delete%22)">GeoIP_delete</a></i> to clean up the memory
+associated with it.
+There are other routines that give us more flexibility, but these are all we need for now.
+</p><p>
+The following is pseudo, heuristic, informal sample  C code that we might use
+to interact with the library as if we were writing interactively without declarations.
+</p><pre xmlns:s3="http://www.r-project.org/S3" xmlns:cpp="http://www.cplusplus.org" xmlns:xi="http://www.w3.org/2001/XInclude" xmlns="" class="C">
+db = GeoIP_new(GEOIP_STANDARD)
+r = GeoIP_record_by_addr(db, "169.237.46.32")
+r-&gt;latitude
+r-&gt;longitude
+r = GeoIP_record_by_name(db, "www.omegahat.org")
+r-&gt;city
+r-&gt;postal_code
+r-&gt;country_code
+</pre>
+<p><br xmlns:s3="http://www.r-project.org/S3" xmlns:cpp="http://www.cplusplus.org" xmlns:xi="http://www.w3.org/2001/XInclude" xmlns="">
+The <i xmlns:c="http://www.C.org" xmlns:cpp="http://www.cplusplus.org" xmlns="" class="cfunc">GeoIP_record_by_addr</i> routine returns
+a pointer to a C struct with 12 different fields identifying
+the location of the IP address.
+</p></div><div class="section" title="Manually Interfacing to the C library with Rffi"><div class="titlepage"><div><div><h2 class="title" style="clear: both"><a id="id36292739"></a>Manually Interfacing to the C library with <a xmlns:omg="http://www.omegahat.org" xmlns:rwx="http://www.omegahat.org/RwxWidgets" xmlns="" href="http://www.omegahat.org/Rffi">Rffi</a></h2></div></div></div><p>
+We'll start by manually creating the FFI-based interface to the routines
+in the pseudo C code above.
+First, we need to define a call interface (CIF) for <i xmlns:c="http://www.C.org" xmlns:cpp="http://www.cplusplus.org" xmlns="" class="cfunc">GeoIP_new</i>.
+This takes an integer and returns a pointer to a <b xmlns:c="http://www.C.org" xmlns:cpp="http://www.cplusplus.org" xmlns="" class="cstruct">GeoIP</b>
+object. We can treat that as an opaque data type  and we don't need to
+know about its contents.  We just pass it to the other routines we will invoke.
+So we can define the CIF as
+
+</p><div xmlns="" class="codeToggle"><div class="unhidden" id="id36292758"><div><pre class="rcode" title="R code">
+library(Rffi)
+GeoIP_new_cif = CIF(pointerType, list(sint32Type))
+</pre></div></div></div>
+<div xmlns="" class="clearFloat"></div>
+<p>
+
+Next we need to know the appropriate value to pass as the integer argument.
+By reading the documentation or examples, we see that it is a combination of
+one or more options from the GeoIPOptions enumeration. We'll just use
+the GEOPI_STANDARD value which is 0. We'll talk later about how we can use
+the symbolic names for these enumerations to make the code clearer and more robust.
+So now we are ready to call the routine.
+The first thing to do is load the GeoIP library.
+The details will differ on your machine but on a Mac OS X box, we can use
+</p><div xmlns="" class="codeToggle"><div class="unhidden" id="id36292766"><div><pre class="rcode" title="R code">
+dyn.load("/usr/local/lib/libGeoIP.dylib")
+</pre></div></div></div>
+<div xmlns="" class="clearFloat"></div>
+<p>
+(We can use </p><div xmlns="" class="codeToggle"><div class="unhidden" id="id36292769"><div><pre class="rcode" title="R code">.Platform$dylib.ext</pre></div></div></div>
+<div xmlns="" class="clearFloat"></div>
+<p> to find the appropriate
+extension. /usr/local/lib is a reasonable place to expect the library
+to be located, but it is not guaranteed.)
+
+</p><p>
+So now we have loaded the routines, we can invoke <i xmlns:c="http://www.C.org" xmlns:cpp="http://www.cplusplus.org" xmlns="" class="cfunc">GeoIP_new</i>
+with
+</p><div xmlns="" class="codeToggle"><div class="unhidden" id="id36292780"><div><pre class="rcode" title="R code">
+db = callCIF(GeoIP_new_cif, "GeoIP_new", 0L)
+</pre></div></div></div>
+<div xmlns="" class="clearFloat"></div>
+<p>
+<b xmlns:rs="http://www.omegahat.org/RS" xmlns:s="http://cm.bell-labs.com/stat/S4" xmlns="" class="$">db</b> is a simple external pointer object in R.
+This is very "raw" as it stands and we probably want to 
+create a class to represent that this is a GeoIP pointer object
+and create a function to hide the details of calling
+GeoIP_new.
+But we'll come back to this niceties later.
+</p><p>
+Next we want to invoke <i xmlns:c="http://www.C.org" xmlns:cpp="http://www.cplusplus.org" xmlns="" class="cfunc">GeoIP_record_by_addr</i>.
+So again we need create a CIF for this signature.
+This takes a pointer (to a GeoIP object)
+and a string giving the dotted-quad IP address.
+The routine returns a pointer to a GeoIPRecord structure.
+This is defined in the GeoIPCity.h header file as
+</p><pre class="programlisting">
+typedef struct GeoIPRecordTag {
+	char *country_code;
+	char *country_code3;
+	char *country_name;
+	char *region;
+	char *city;
+	char *postal_code;
+	float latitude;
+	float longitude;
+	union {
+	  int metro_code; /* metro_code is a alias for dma_code */
+	  int dma_code;
+        };
+	int area_code;
+	int charset;
+	char *continent_code;
+} GeoIPRecord;
+</pre><p>
+We don't have to deal with this stuct quite yet.
+Instead, we need only define the CIF as returning a pointer.
+So our CIF is created as
+
+</p><div xmlns="" class="codeToggle"><div class="unhidden" id="id36292805"><div><pre class="rcode" title="R code">
+GeoIP_record_by_addr_cif = CIF(pointerType, list(db = pointerType, addr = stringType))
+</pre></div></div></div>
+<div xmlns="" class="clearFloat"></div>
+<p>
+The name of the R variable used to store the CIF is irrelevant, of course.
+I am using the name of the routine with a _cif suffix for clarity so we know  what the value is for.
+But of course, this same CIF could be used with any routine with the same signature.
+</p><p>
+Now we can call the routine
+
+</p><div xmlns="" class="codeToggle"><div class="unhidden" id="id36292815"><div><pre class="rcode" title="R code">
+r = callCIF(GeoIP_record_by_addr_cif, "GeoIP_record_by_addr", db, "169.237.46.32")
+</pre></div></div></div>
+<div xmlns="" class="clearFloat"></div>
+<p>
+
+With this, we find we get an error from GeoIP
+</p><pre xmlns="" class="rerror">
+Invalid database type GeoIP Country Edition, expected GeoIP City Edition, Rev 1
+</pre>
+<p>
+This is because I am using the city-level API on the country database.
+I need to install the city database. 
+We'll take a slight detour and show how to make a call to find the country of
+an IP address and then return to dealing with the city database.
+
+</p><p>
+In the GeoIP.h header file, there is a routine
+<i xmlns:c="http://www.C.org" xmlns:cpp="http://www.cplusplus.org" xmlns="" class="cfunc">GeoIP_country_code_by_addr</i>.
+This has a very similar signature as 
+<i xmlns:c="http://www.C.org" xmlns:cpp="http://www.cplusplus.org" xmlns="" class="cfunc">GeoIP_record_by_addr</i> but returns
+the name of the country in which the IP address is located.
+So we can create a new CIF and invoke this routine:
+
+</p><div xmlns="" class="codeToggle"><div class="unhidden" id="id36292837"><div><pre class="rcode" title="R code">
+cif = CIF(stringType, list(db = pointerType, addr = stringType))
+country = callCIF(cif, "GeoIP_country_code_by_addr", db, "169.237.46.32")
+</pre></div></div></div>
+<div xmlns="" class="clearFloat"></div>
+<p>
+If we look at the R object <b xmlns:rs="http://www.omegahat.org/RS" xmlns:s="http://cm.bell-labs.com/stat/S4" xmlns="" class="$">country</b>, 
+we see it is a list with two elements named "value" and "inputs".
+</p><div xmlns="" class="codeToggle"><div class="unhidden" id="id36292845"><div><pre class="rcode" title="R code">country$value</pre></div></div></div>
+<div xmlns="" class="clearFloat"></div>
+<p> is the return value and gives us the
+name of the country - "US".
+The second element - "inputs" - is the <b xmlns:rs="http://www.omegahat.org/RS" xmlns:s="http://cm.bell-labs.com/stat/S4" xmlns="" class="$">db</b> argument
+to the routine.  Since that is a pointer, the routine may have modified
+its contents. So <i xmlns:s3="http://www.r-project.org/S3" xmlns:cpp="http://www.cplusplus.org" xmlns:xi="http://www.w3.org/2001/XInclude" xmlns="" class="rfunc"><a href="Help//callCIF.html">callCIF()
+  </a></i> returns that. 
+We know that any updates will be see in the R variable <b xmlns:rs="http://www.omegahat.org/RS" xmlns:s="http://cm.bell-labs.com/stat/S4" xmlns="" class="$">db</b>
+and also we think that it is actually not modified in the routine.
+So when creating the CIF, we can say that this is not mutable.
+Alternatively,  in the call to <i xmlns:s3="http://www.r-project.org/S3" xmlns:cpp="http://www.cplusplus.org" xmlns:xi="http://www.w3.org/2001/XInclude" xmlns="" class="rfunc"><a href="Help//callCIF.html">callCIF()
+  </a></i>, we can tell
+it not to return the inputs.
+So
+
+</p><div xmlns="" class="codeToggle"><div class="unhidden" id="id36292864"><div><pre class="rcode" title="R code">
+country = callCIF(cif, "GeoIP_country_code_by_addr", db, "169.237.46.32", returnInputs = FALSE)
+</pre></div></div></div>
+<div xmlns="" class="clearFloat"></div>
+<p>
+returns just the country name as a string.
+And 
+</p><div xmlns="" class="codeToggle"><div class="unhidden" id="id36292869"><div><pre class="rcode" title="R code">
+cif = CIF(stringType, list(db = pointerType, addr = stringType), mutable = c(FALSE, FALSE))
+country = callCIF(cif, "GeoIP_country_code_by_addr", db, "169.237.46.32")
+</pre></div></div></div>
+<div xmlns="" class="clearFloat"></div>
+<p>
+also returns just the string.
+Setting the mutability of the parameters in the CIF is a stronger
+statement as this applies to all routines we call with the same CIF.
+</p><p>
+Now let's return to the issue of the city database.
+You can download this from <a class="ulink" href="http://www.maxmind.com/app/geolitecity" target="_top">http://www.maxmind.com/app/geolitecity</a>.
+Follow the download and installation instructions there.
+We need to tell our GeoIP "server" which database to use. 
+<i xmlns:c="http://www.C.org" xmlns:cpp="http://www.cplusplus.org" xmlns="" class="cfunc">GeoIP_new</i> is a little too simple as we cannot
+control the choice of database.
+Looking in the GeoIP.h header file, we see three potentially promising
+routines:
+</p><pre xmlns:s3="http://www.r-project.org/S3" xmlns:cpp="http://www.cplusplus.org" xmlns:xi="http://www.w3.org/2001/XInclude" xmlns="" class="C">
+GEOIP_API int GeoIP_db_avail(int type);
+GEOIP_API GeoIP* GeoIP_open_type (int type, int flags);
+GEOIP_API GeoIP* GeoIP_open(const char * filename, int flags);
+</pre>
+<p><br xmlns:s3="http://www.r-project.org/S3" xmlns:cpp="http://www.cplusplus.org" xmlns:xi="http://www.w3.org/2001/XInclude" xmlns="">
+If type identifies which database to open, we can check whether
+the database is available and use that with 
+GeoIP_open_type. If we have the database file in
+a non-standard location, we can use GeoIP_open to provide the
+full file name.
+</p><p>
+The type should be one of the GeoIPDBTypes enumerated values
+and we can try GEOIP_CITY_EDITION_REV1 (with a value of 2)
+as the possible option.
+So let's create a CIF for calling GeoIP_db_avail and call that:
+</p><div xmlns="" class="codeToggle"><div class="unhidden" id="id36292901"><div><pre class="rcode" title="R code">
+callCIF(CIF(sint32Type, list(sint32Type)), "GeoIP_db_avail", 2L)
+</pre></div></div></div>
+<div xmlns="" class="clearFloat"></div>
+<p>
+This returns 0, i.e. not available for me. We can try the different options,
+but GeoIP seems to only see the country database.
+So let's try to load the file by name.
+</p><p>
+We need to create a CIF for  GeoIP_open and invoke it:
+
+</p><div xmlns="" class="codeToggle"><div class="unhidden" id="id36292910"><div><pre class="rcode" title="R code">
+cif = CIF(pointerType, list(stringType, sint32Type))
+db_city = callCIF(cif, "GeoIP_open", "/usr/local/share/GeoIP/GeoLiteCity.dat", 0L)
+</pre></div></div></div>
+<div xmlns="" class="clearFloat"></div>
+<p>
+This successfully returns a pointer. So now we can return to obtaining
+a record:
+
+</p><div xmlns="" class="codeToggle"><div class="unhidden" id="id36292915"><div><pre class="rcode" title="R code">
+r = callCIF(GeoIP_record_by_addr_cif, "GeoIP_record_by_addr", db_city, "169.237.46.32")
+</pre></div></div></div>
+<div xmlns="" class="clearFloat"></div>
+<p>
+And this also returns successfully. We probably don't want the mutable inputs so 
+we can change our call
+
+</p><div xmlns="" class="codeToggle"><div class="unhidden" id="id36292920"><div><pre class="rcode" title="R code">
+r = callCIF(GeoIP_record_by_addr_cif, "GeoIP_record_by_addr", db_city, "169.237.46.32", returnInputs = FALSE)
+</pre></div></div></div>
+<div xmlns="" class="clearFloat"></div>
+<p>
+Now we have the record which is a pointer to the 12-element struct displayed above. 
+Since we want to access fields in that struct, we need to create a description
+of the types of elements in the struct. We can do this programmatically, but for
+now we will do it manually.
+</p><p>
+We need to create a new type similar to sint32Type, stringType, etc.
+but for describing this particular GeoIPRecord structure.
+We use the function  <i xmlns:s3="http://www.r-project.org/S3" xmlns:cpp="http://www.cplusplus.org" xmlns:xi="http://www.w3.org/2001/XInclude" xmlns="" class="rfunc"><a href="Help//structType.html">structType()
+  </a></i> to do this.
+We pass it an ordered list of the types of the fields in the struct.
+So for this struct, we would use R code something like
+
+</p><div xmlns="" class="codeToggle"><div class="unhidden" id="id36292935"><div><pre class="rcode" title="R code">
+GeoIPRecord_type =
+            structType(list(stringType, # country_code
+                           stringType, # country_code3
+                           stringType, # country_name
+                           stringType, # region
+                           stringType, # city
+                           stringType, # postal_code
+                           floatType,  # latitude
+                           floatType,  # longitude
+                           sint32Type, # the union element
+                           sint32Type, # area_code
+                           sint32Type, # charset
+                           stringType # continent_code
+                          ))
+</pre></div></div></div>
+<div xmlns="" class="clearFloat"></div>
+<p>
+
+Now that we have this description, we can use it to
+have <a xmlns:omg="http://www.omegahat.org" xmlns:rwx="http://www.omegahat.org/RwxWidgets" xmlns="" href="http://www.omegahat.org/Rffi">Rffi</a> retrieve individual
+fields from the pointer to the struct or 
+copy all of the fields to an R list.
+The two functions to do this are
+<i xmlns:s3="http://www.r-project.org/S3" xmlns:cpp="http://www.cplusplus.org" xmlns:xi="http://www.w3.org/2001/XInclude" xmlns="" class="rfunc"><a href="Help//getStructField.html">getStructField()
+  </a></i>
+and <i xmlns:s3="http://www.r-project.org/S3" xmlns:cpp="http://www.cplusplus.org" xmlns:xi="http://www.w3.org/2001/XInclude" xmlns="" class="rfunc"><a href="Help//getStructValue.html">getStructValue()
+  </a></i>.
+We will access the latitude and longitude fields.
+Unfortunately, we didn't put names on the elements
+of the struct description so R doesn't know
+how to match latitude to the 7th element.
+So we can use the index of the element using
+</p><div xmlns="" class="codeToggle"><div class="unhidden" id="id36292958"><div><pre class="rcode" title="R code">
+getStructField(r, 7, GeoIPRecord_type)
+</pre></div></div></div>
+<div xmlns="" class="clearFloat"></div>
+<p>
+and we get our value.
+Similarly, we can get the city name with
+</p><div xmlns="" class="codeToggle"><div class="unhidden" id="id36292962"><div><pre class="rcode" title="R code">
+getStructField(r, 5, GeoIPRecord_type)
+</pre></div></div></div>
+<div xmlns="" class="clearFloat"></div>
+<p>
+Using indices is not a good idea. So we should put names on the elements
+in the list we pass to <i xmlns:s3="http://www.r-project.org/S3" xmlns:cpp="http://www.cplusplus.org" xmlns:xi="http://www.w3.org/2001/XInclude" xmlns="" class="rfunc"><a href="Help//structType.html">structType()
+  </a></i>:
+
+</p><div xmlns="" class="codeToggle"><div class="unhidden" id="id36292970"><div><pre class="rcode" title="R code">
+GeoIPRecord_type =
+           structType(list(country_code = stringType, 
+                           country_code3 = stringType,  
+                           country_name = stringType,  
+                           region = stringType,  
+                           city = stringType,  
+                           postal_code = stringType,  
+                           latitude = floatType,   
+                           longitude = floatType, 
+                           "?" = sint32Type,  # the union element
+                           area_code = sint32Type, 
+                           charset = sint32Type,  
+                           continent_code = stringType 
+                          ))
+
+</pre></div></div></div>
+<div xmlns="" class="clearFloat"></div>
+<p>
+
+Now we can use a name to access the field:
+</p><div xmlns="" class="codeToggle"><div class="unhidden" id="id36292979"><div><pre class="rcode" title="R code">
+getStructField(r, "latitude", GeoIPRecord_type)
+getStructField(r, "city", GeoIPRecord_type)
+</pre></div></div></div>
+<div xmlns="" class="clearFloat"></div>
+<p>
+
+We can even get multiple values in a single call:
+</p><div xmlns="" class="codeToggle"><div class="unhidden" id="id36292984"><div><pre class="rcode" title="R code">
+getStructField(r, c("latitude", "city", "region"), GeoIPRecord_type)
+</pre></div></div></div>
+<div xmlns="" class="clearFloat"></div>
+<p>
+
+
+</p><p>
+There are lots of other things we can look at in the API
+that are more complex, e.g. GeoIP_next_record, GeoIPRegion struct
+and fixed length arrays, the union, etc., but we will return to those later.
+For now we have the information we want from GeoIP and
+we are working with simple/built-in data types and a single struct.
+If we wanted to access the fields in the GeoIP object, we would
+describe its structure in the same way as for the GeoIPRecord.
+This would give us access to the name of the file,  when it was
+last updated, etc.
+</p><p>
+We will take a brief look at how we can access global variables.
+libGeoIP has several global variables which are strings or
+arrays of strings or pointers to strings.
+For example, GeoIPDBFileName is a pointer to a string,
+GeoIPDBFileName is a string and GeoIP_country_code
+is an array of 253 strings of length 3.
+Once we describe the type of the variabe, we can use
+<i xmlns:s3="http://www.r-project.org/S3" xmlns:cpp="http://www.cplusplus.org" xmlns:xi="http://www.w3.org/2001/XInclude" xmlns="" class="rfunc"><a href="Help//getNativeValue.html">getNativeValue()
+  </a></i> to retrieve the value of
+the object. This will convert the C value to an R object
+using the same conversion mechanism as  used in converting
+the return value via <i xmlns:s3="http://www.r-project.org/S3" xmlns:cpp="http://www.cplusplus.org" xmlns:xi="http://www.w3.org/2001/XInclude" xmlns="" class="rfunc"><a href="Help//callCIF.html">callCIF()
+  </a></i>.
+</p><p>
+So let's find the value of  GeoIPDBFileName:
+
+</p><div xmlns="" class="codeToggle"><div class="unhidden" id="id36293013"><div><pre class="rcode" title="R code">
+getNativeValue("GeoIPDBFileName", stringType)
+</pre></div></div></div>
+<div xmlns="" class="clearFloat"></div>
+<p>
+</p><div class="note" title="Note" style="margin-left: 0.5in; margin-right: 0.5in;"><table border="0" summary="Note"><tr><td rowspan="2" align="center" valign="top" width="25"><img alt="[Note]" src="/Users/duncan/Classes/StatComputing/XDynDocs/inst/XSL/docbook-xsl-current/images/note.svg"></img></td><th align="left">Note</th></tr><tr><td align="left" valign="top"><p>Come back to this and accessing arrays in R by indexing, etc.</p></td></tr></table></div><p>
+</p></div><div class="section" title="Cleaning up the CIF interfaces"><div class="titlepage"><div><div><h2 class="title" style="clear: both"><a id="id36293023"></a>Cleaning up the CIF interfaces</h2></div></div></div><p>
+Before we turn our attention to how we might automate a lot of the
+work we did above, we will think about how we might like to have  the
+R interface to these routines and data structures.
+Firstly, we want to hide the create of the CIFs and the calls to <i xmlns:s3="http://www.r-project.org/S3" xmlns:cpp="http://www.cplusplus.org" xmlns:xi="http://www.w3.org/2001/XInclude" xmlns="" class="rfunc"><a href="Help//callCIF.html">callCIF()
+  </a></i>
+and provide R functions that are direct proxies for the C routines with all
+these details inside the R functions.
+Secondly, we would like to define classes for the pointers that are returned
+so we can identify the type of object to which they point.
+We also would like to have <code xmlns:rs="http://www.omegahat.org/RS" xmlns:s="http://cm.bell-labs.com/stat/S4" xmlns="" class="sfunction">$</code> and <code xmlns:rs="http://www.omegahat.org/RS" xmlns:s="http://cm.bell-labs.com/stat/S4" xmlns="" class="sfunction">[[</code> operators
+for accessing fields in a struct rather than having to cal
+<i xmlns:s3="http://www.r-project.org/S3" xmlns:cpp="http://www.cplusplus.org" xmlns:xi="http://www.w3.org/2001/XInclude" xmlns="" class="rfunc"><a href="Help//getStructField.html">getStructField()
+  </a></i>.
+Additionally, if we are making repeated calls to the same routine, we
+don't want to incur the  penalty of having to find the address of the routine
+in each call. So our functions should cache that on the first call or when they
+are defined. We can do this with closures or a global variable.
+</p></div><div class="section" title="Automating the Interface Generation"><div class="titlepage"><div><div><h2 class="title" style="clear: both"><a id="gcctu"></a>Automating the Interface Generation</h2></div></div></div><div xmlns="" class="codeToggle"><div class="unhidden" id="id36293061"><div><pre class="rcode" title="R code">
+invisible(sapply(c("const.R", "createRFunc.R", "defClasses.R", "tuTORType.R", "tuToFFI.R"), source))
+</pre></div></div></div>
+<div xmlns="" class="clearFloat"></div>
+<p>
+We now turn our attention to how we can programmatically
+obtain descriptions of C routines and data structures and
+then use these to create CIFs and struct types so that we don't have to
+manually build the interface between R and C code.
+We use the <a xmlns:omg="http://www.omegahat.org" xmlns:rwx="http://www.omegahat.org/RwxWidgets" xmlns="" href="http://www.omegahat.org/RGCCTranslationUnit">RGCCTranslationUnit</a> package to read 
+the C code. (We could use RCIndex, but that is still a work in progress.)
+We first create a simple C file that merely includes the GeoIP.h and 
+GeoIPCity header file.
+</p><pre xmlns:s3="http://www.r-project.org/S3" xmlns:cpp="http://www.cplusplus.org" xmlns:xi="http://www.w3.org/2001/XInclude" xmlns="" class="C">
+#include &lt;GeoIP.h&gt;
+#include &lt;GeoIPCity.h&gt;
+
+
+
+</pre>
+<p><br xmlns:s3="http://www.r-project.org/S3" xmlns:cpp="http://www.cplusplus.org" xmlns:xi="http://www.w3.org/2001/XInclude" xmlns="">
+
+Then we generate the TU output from gcc with
+</p><pre xmlns:r="http://www.r-project.org" xmlns:s="http://cm.bell-labs.com/stat/S4" xmlns:c="http://www.C.org" xmlns:python="http://www.python.org" xmlns:perl="http://www.perl.org" xmlns:vb="http://www.visualbasic.com" xmlns:omegahat="http://www.omegahat.org" xmlns:bioc="http://www.bioconductor.org" xmlns:java="http://www.java.com" xmlns:statdocs="http://www.statdocs.org" xmlns:gtk="http://www.gtk.org" xmlns:com="http://www.microsoft.com" xmlns:sh="http://www.shell.org" xmlns="" class="shell">
+gcc -fdump-translation-unit -o /dev/null -c Rgeoip.c
+</pre>
+<p>
+
+Now we can read this translation unit into R:
+</p><div xmlns="" class="codeToggle"><div class="unhidden" id="id36293083"><div><pre class="rcode" title="R code">
+library(RGCCTranslationUnit)
+tu = parseTU("~/Projects/org/omegahat/R/GeoIP/inst/doc/Rgeoip.c.001t.tu")
+</pre></div></div></div>
+<div xmlns="" class="clearFloat"></div>
+<p>
+We are interested in the routines, so let's find all of them
+and then get the subset for the GeoIP interface:
+</p><div xmlns="" class="codeToggle"><div class="unhidden" id="id36293088"><div><pre class="rcode" title="R code">
+funcs = getRoutines(tu)
+funcs = funcs[ grep("^GeoIP", names(funcs), value = TRUE) ]
+</pre></div></div></div>
+<div xmlns="" class="clearFloat"></div>
+<p>
+</p><p>
+We will also be interested in the different enumerations
+used in the code, so let's find those also.
+</p><div xmlns="" class="codeToggle"><div class="unhidden" id="id36293096"><div><pre class="rcode" title="R code">
+enums = getEnumerations(tu)
+names(enums)
+</pre></div></div></div>
+<div xmlns="" class="clearFloat"></div>
+<p>
+</p><p>
+From the work we did manually, we are interested in
+the routines <i xmlns:c="http://www.C.org" xmlns:cpp="http://www.cplusplus.org" xmlns="" class="cfunc">GeoIP_open</i> and <i xmlns:c="http://www.C.org" xmlns:cpp="http://www.cplusplus.org" xmlns="" class="cfunc">GeoIP_record_by_addr</i>.
+Because we want to access the fields in the struct returned by
+<i xmlns:c="http://www.C.org" xmlns:cpp="http://www.cplusplus.org" xmlns="" class="cfunc">GeoIP_record_by_addr</i>, we will be interested
+in the GeoIPRecord structure. We'll come by that passively when
+finding out about the signature for <i xmlns:c="http://www.C.org" xmlns:cpp="http://www.cplusplus.org" xmlns="" class="cfunc">GeoIP_record_by_addr</i>.
+</p><p>
+Let's start with <i xmlns:c="http://www.C.org" xmlns:cpp="http://www.cplusplus.org" xmlns="" class="cfunc">GeoIP_open</i>.  We have the node in the
+translation unit graph that corresponds to this routine's
+declaration. We now want to pull together all the information about
+the pieces of this routine and we use <i xmlns:s3="http://www.r-project.org/S3" xmlns:cpp="http://www.cplusplus.org" xmlns:xi="http://www.w3.org/2001/XInclude" xmlns="" class="rfunc"><a href="Help//resolveType.html">resolveType()
+  </a></i> for
+this.  We pass it the node and the translation unit so it can follow
+all the relevant links:
+</p><div xmlns="" class="codeToggle"><div class="unhidden" id="id36293130"><div><pre class="rcode" title="R code">
+ip.open = resolveType(funcs[["GeoIP_open"]], tu)
+ip.open
+</pre></div></div></div>
+<div xmlns="" class="clearFloat"></div>
+<p>
+Note that the names of the parameters aren't available in the TU from GCC
+and we use simple numbers!
+</p><p>
+We can see the types of the parameters printed on the console,
+but now we want to programmatically access them and map to the 
+corresponding FFI types.
+We can loop over the parameters, fetch the type of each
+and pass this to <i xmlns:s3="http://www.r-project.org/S3" xmlns:cpp="http://www.cplusplus.org" xmlns:xi="http://www.w3.org/2001/XInclude" xmlns="" class="rfunc"><a href="Help//gccTUTypeToFFI.html">gccTUTypeToFFI()
+  </a></i>.
+As the name suggests, the function maps a GCC-TU type
+to the corresponding FFI type.
+So our code to get the inputs for creating the CIF for the routine is
+</p><div xmlns="" class="codeToggle"><div class="unhidden" id="id36293145"><div><pre class="rcode" title="R code">
+parmTypes = lapply(ip.open$parameters, function(x) gccTUTypeToFFI(x$type))
+rt = gccTUTypeToFFI(ip.open$returnType)
+</pre></div></div></div>
+<div xmlns="" class="clearFloat"></div>
+<p>
+Now we can create the CIF:
+
+</p><div xmlns="" class="codeToggle"><div class="unhidden" id="id36293149"><div><pre class="rcode" title="R code">
+ip.open.cif = CIF(rt, parmTypes)
+</pre></div></div></div>
+<div xmlns="" class="clearFloat"></div>
+<p>
+We may want to add information about whether the parameters are mutable or not
+by looking for const declarations.
+</p><p>
+Next we will create an R function named GeoIP_open
+and have it accept 2 parameters and call the corresponding C routine.
+Our function can be built from the description of the routine <b xmlns:rs="http://www.omegahat.org/RS" xmlns:s="http://cm.bell-labs.com/stat/S4" xmlns="" class="$">ip.open</b>.
+The function needs to know the name of the R variable containing the relevant CIF, i.e. oip.open.cif,
+or alternatively create the CIF itself, either once or each time the function is  called.
+The function then merely invokes <i xmlns:s3="http://www.r-project.org/S3" xmlns:cpp="http://www.cplusplus.org" xmlns:xi="http://www.w3.org/2001/XInclude" xmlns="" class="rfunc"><a href="Help//callCIF.html">callCIF()
+  </a></i>, passing the 2 arguments it receives.
+So the function would be 
+</p><pre xmlns:s3="http://www.r-project.org/S3" xmlns:cpp="http://www.cplusplus.org" xmlns:xi="http://www.w3.org/2001/XInclude" xmlns="" class="rfunction">
+GeoIP_open = function(x1, x2, ..., .cif = ip.open.cif) {
+   callCIF(.cif, ip.open.cif, "GeoIP_open", x1, x2, ...)
+}
+</pre>
+<p><br xmlns:s3="http://www.r-project.org/S3" xmlns:cpp="http://www.cplusplus.org" xmlns:xi="http://www.w3.org/2001/XInclude" xmlns="">
+(The fact that the parameter names are lost in the translation unit is a pity. We are working
+on an approach where they are not.)
+Note that we have allowed the caller to specify a different CIF should she want.
+We have also provided a ... argument to allow arguments to be passed on to
+<i xmlns:s3="http://www.r-project.org/S3" xmlns:cpp="http://www.cplusplus.org" xmlns:xi="http://www.w3.org/2001/XInclude" xmlns="" class="rfunc"><a href="Help//callCIF.html">callCIF()
+  </a></i>, i.e. <i xmlns:s3="http://www.r-project.org/S3" xmlns:cpp="http://www.cplusplus.org" xmlns:xi="http://www.w3.org/2001/XInclude" xmlns="" class="rarg">returnInputs</i> and any others we add.
+Instead of referring to a variable that contains the CIF, we could
+provide an expression to create the CIF as the default value for <i xmlns:s3="http://www.r-project.org/S3" xmlns:cpp="http://www.cplusplus.org" xmlns:xi="http://www.w3.org/2001/XInclude" xmlns="" class="rarg">.cif</i>.
+To do this, we would get not the CIF types for the parameters and return type, but
+rather then names of these variables and create the call to <i xmlns:s3="http://www.r-project.org/S3" xmlns:cpp="http://www.cplusplus.org" xmlns:xi="http://www.w3.org/2001/XInclude" xmlns="" class="rfunc"><a href="Help//CIF.html">CIF()
+  </a></i>
+with the elements explicitly articulated, i.e.
+
+</p><div xmlns="" class="codeToggle"><div class="unhidden" id="id36293190"><div><pre class="rcode" title="R code">
+GeoIP_open = function(x1, x2, ..., 
+                       .cif = .cif = CIF(pointerType, list(stringType, sint32Type))) {
+   .........
+}
+</pre></div></div></div>
+<div xmlns="" class="clearFloat"></div>
+<p>
+</p><p>
+Our function should also convert the result to an explicit reference
+to a GeoIP object.  We should define a class, say
+<i xmlns:s3="http://www.r-project.org/S3" xmlns:cpp="http://www.cplusplus.org" xmlns:xi="http://www.w3.org/2001/XInclude" xmlns=""><a href="Help/GeoIP_ref-class.html">GeoIP_ref</a></i>, which is a sub-class of
+<i xmlns:s3="http://www.r-project.org/S3" xmlns:cpp="http://www.cplusplus.org" xmlns:xi="http://www.w3.org/2001/XInclude" xmlns=""><a href="Help/RCReference-class.html">RCReference</a></i>, and turn the pointer into an instance
+of this class.
+We should define methods for the $ and [[ operators for this reference class
+to access individual fields using <i xmlns:s3="http://www.r-project.org/S3" xmlns:cpp="http://www.cplusplus.org" xmlns:xi="http://www.w3.org/2001/XInclude" xmlns="" class="rfunc"><a href="Help//getStructField.html">getStructField()
+  </a></i>.
+Since a GeoIP object is a struct in C, we should also
+define a class in R that mirrors that struct and has the same slots.
+We should also provide a  coercion method to transfer a C reference
+to a GeoIP object to the R type by calling <i xmlns:s3="http://www.r-project.org/S3" xmlns:cpp="http://www.cplusplus.org" xmlns:xi="http://www.w3.org/2001/XInclude" xmlns="" class="rfunc"><a href="Help//getStructValue.html">getStructValue()
+  </a></i>.
+So mapping this routine to an R function involves a lot of peripheral 
+functions that are done just once for each "complex" data structure.
+</p><p>
+We want to write a function that will take a GCC-TU description 
+of a routine and create the R code to call that routine, i.e. the routine
+above. 
+</p><p>
+Of course, in creating our CIF and function and methods, we have had
+to do some programming using the translation unit code. The amount of
+effort is at least as much as when we did it manually by reading the
+header file ourselves, although we have a much cleaner and more
+comprehensive interface.  The important thing to recognize, however,
+is that we can automate this. While we did go through all the steps in
+detail, these can be put into a function to create the CIF for an
+arbitrary routine.  And since we have information for all the
+routines, we can generate CIFs for the entire GeoIP library, or any C
+library for that matter.
+</p><p>
+The <a xmlns:omg="http://www.omegahat.org" xmlns:rwx="http://www.omegahat.org/RwxWidgets" xmlns="" href="http://www.omegahat.org/RGCCTranslationUnit">RGCCTranslationUnit</a> package
+provides the functions to create the R code described
+above for arbitrary routines and structure definitions.
+We can use them as follows to create an interface
+to GeoIP_open and GeoIP_record_by_addr:
+
+
+</p><div xmlns="" class="codeToggle"><div class="unhidden" id="id36293239"><div>
+<a class="r-code-chunk-name" name="gen"></a><pre class="rcode" title="R code ID: gen">
+ip.open = resolveType(funcs[["GeoIP_open"]], tu)
+define(createRFunc(ip.open))
+define(defStructClass(ip.open$returnType@type)) 
+record = resolveType(funcs[["GeoIP_record_by_addr"]], tu)
+define(createRFunc(record))
+define(defStructClass(record$returnType@type))
+</pre>
+</div></div></div>
+<div xmlns="" class="clearFloat"></div>
+<p>
+
+We can find out what classses and functions were defined with
+</p><div xmlns="" class="codeToggle"><div class="unhidden" id="id36293247"><div><pre class="rcode" title="R code">
+getClasses(globalenv())
+ls(pattern = "^GeoIP")
+</pre></div></div></div>
+<div xmlns="" class="clearFloat"></div>
+<p>
+We used closures, so all of the CIF and struct type definitions
+were made locally within the 
+</p><p>
+The next thing we might want to do is write the generated code
+to a file so that we can use it in other R sessions.
+Instead of calling <i xmlns:s3="http://www.r-project.org/S3" xmlns:cpp="http://www.cplusplus.org" xmlns:xi="http://www.w3.org/2001/XInclude" xmlns="" class="rfunc"><a href="Help//define.html">define()
+  </a></i>, we can store the
+generated code and then use <i xmlns:s3="http://www.r-project.org/S3" xmlns:cpp="http://www.cplusplus.org" xmlns:xi="http://www.w3.org/2001/XInclude" xmlns="" class="rfunc"><a href="Help//cat.html">cat()
+  </a></i> to write it to
+a file.
+So we generate it as follows:
+</p><div xmlns="" class="codeToggle"><div class="unhidden" id="id36293264"><div><pre class="rcode" title="R code">
+code= list(createRFunc(ip.open),
+           defStructClass(ip.open$returnType@type) ,
+           createRFunc(record),
+           defStructClass(record$returnType@type))
+</pre></div></div></div>
+<div xmlns="" class="clearFloat"></div>
+<p>
+Then we can write it with
+
+</p><div xmlns="" class="codeToggle"><div class="unhidden" id="id36293268"><div><pre class="rcode" title="R code">
+cat("library(Rffi)",
+    "dyn.load('/usr/local/lib/libGeoIP.dylib')", 
+    unlist(code), sep = "\n", file = "geoIP.R")
+</pre></div></div></div>
+<div xmlns="" class="clearFloat"></div>
+<p>
+
+</p><p>
+
+Now that everything is defined, we can  load the
+DSO and call the functions
+
+</p><div xmlns="" class="codeToggle"><div class="unhidden" id="id36293276"><div>
+<a class="r-code-chunk-name" name="rinterface"></a><pre class="rcode" title="R code ID: rinterface">
+dyn.load("/usr/local/lib/libGeoIP.dylib")
+db = GeoIP_open("/usr/local/share/GeoIP/GeoLiteCity.dat", 0L, FALSE)
+class(db)
+r = GeoIP_record_by_addr(db, "169.237.46.32", FALSE)
+class(r)
+names(r)
+r$city
+r$area_code
+r$latitude 
+r$longitude
+</pre>
+</div></div></div>
+<div xmlns="" class="clearFloat"></div>
+<p>
+
+</p><p>
+The following code takes 1000 IP addresses from a web log and
+gets the city for each:
+
+</p><div xmlns="" class="codeToggle"><div class="unhidden" id="id36293289"><div><pre class="rcode" title="R code">
+load("ip1000.rda")
+o = sapply(ip, function(i) GeoIP_record_by_addr(db, i, returnInputs = FALSE)$city)
+</pre></div></div></div>
+<div xmlns="" class="clearFloat"></div>
+<p>
+
+
+</p></div><div class="section" title="Enumerations"><div class="titlepage"><div><div><h2 class="title" style="clear: both"><a id="id36293298"></a>Enumerations</h2></div></div></div><p>
+We have looked at working with routines and different data structures.
+We now return to enumerations and symbolic constants.
+We saw the GeoIPOptions data type which are values we pass
+to <i xmlns:c="http://www.C.org" xmlns:cpp="http://www.cplusplus.org" xmlns="" class="cfunc">GeoIP_open</i> or <i xmlns:c="http://www.C.org" xmlns:cpp="http://www.cplusplus.org" xmlns="" class="cfunc">GeoIP_new</i>.
+The possible values are GEOIP_STANDARD, GEOIP_MEMORY_CACHE,
+GEOIP_CHECK_CACHE, GEOIP_INDEX_CACHE and GEOIP_MMAP_CACHE.
+These labels correspond to the values 0, 1, 2, 4, and 8,
+respectively, but of course the names are far more suggestive of the
+meaning.  As a result, we want to use the symbolic names in R.
+So we can define  R variables with the same names and values:
+
+</p><div xmlns="" class="codeToggle"><div class="unhidden" id="id36293316"><div><pre class="rcode" title="R code">
+GEOIP_STANDARD = 0L 
+GEOIP_MEMORY_CACHE = 1L
+GEOIP_CHECK_CACHE = 2L
+GEOIP_INDEX_CACHE = 4L
+GEOIP_MMAP_CACHE = 8L
+</pre></div></div></div>
+<div xmlns="" class="clearFloat"></div>
+<p>
+Note that we have explicitly made these integers.
+</p><p>
+There are three aspects of this we want to consider.  The first is
+somewhat cosmetic and a matter of convenience.  All of these values
+start with the string "GEOIP_".  It would be more convenient to
+optionally refer to the values without this common prefix,
+e.g. STANDARD, MEMORY_CACHE, etc.  Secondly, while the GeoIP API
+declares the flag parameter type as <i xmlns:s3="http://www.r-project.org/S3" xmlns:cpp="http://www.cplusplus.org" xmlns:xi="http://www.w3.org/2001/XInclude" xmlns="" class="$class">int</i>, we should
+use explicit enumeration types when this is what is expected. This
+helps to catch errors in the code and is also clearer.  If a routine
+is declared with an enumeration parameter, we must be able to validate
+the value as being from the set of possible values.  We can achieve
+this by defining a class for the enumeration type in R and defining
+coercion methods from integers or names to the actual value.
+Furthermore, we can use the symbolic names on the integer values to
+make the values more intelligible for humans to read.  The third issue
+is that not all enumerations are simple mutually exclusive options.
+Some enumerations are intended to be combined together as bitwise-AND
+values and then compared to the individual possible values via bitwise
+OR operations.  This is typically done using powers of 2 for the
+values to set individual bits. 
+This might be done with an enumeration in which the values for the individual
+elements are explicitly specified, e.g.
+</p><pre xmlns:s3="http://www.r-project.org/S3" xmlns:cpp="http://www.cplusplus.org" xmlns:xi="http://www.w3.org/2001/XInclude" xmlns="" class="C">
+enum {
+ CURLPROTO_HTTP = 1,
+ CURLPROTO_HTTPS = 2,
+ CURLPROTO_FTP = 4,
+ CURLPROTO_FTPS = 8,
+  ...
+};
+</pre>
+<p><br xmlns:s3="http://www.r-project.org/S3" xmlns:cpp="http://www.cplusplus.org" xmlns:xi="http://www.w3.org/2001/XInclude" xmlns="">
+or with a collection of pre-processor #define directives, e.g.,
+</p><pre xmlns:s3="http://www.r-project.org/S3" xmlns:cpp="http://www.cplusplus.org" xmlns:xi="http://www.w3.org/2001/XInclude" xmlns="" class="C">
+#define CURLPROTO_HTTP   (1&lt;&lt;0)
+#define CURLPROTO_HTTPS  (1&lt;&lt;1)
+#define CURLPROTO_FTP    (1&lt;&lt;2)
+#define CURLPROTO_FTPS   (1&lt;&lt;3)
+ ...
+</pre>
+<p><br xmlns:s3="http://www.r-project.org/S3" xmlns:cpp="http://www.cplusplus.org" xmlns:xi="http://www.w3.org/2001/XInclude" xmlns="">.
+These come from libcurl and relate to the different protocols.
+</p><p>
+A critical different between these and enumerations is that we combine two of these values
+via an OR operation and we obtain a new and permissible value.  
+For example, we can query whether the protocol to be used includes
+HTTP or HTTPS with 
+</p><pre xmlns:s3="http://www.r-project.org/S3" xmlns:cpp="http://www.cplusplus.org" xmlns:xi="http://www.w3.org/2001/XInclude" xmlns="" class="C"> 
+  protocol &amp; (CURLPROTO_HTTP | CURLPROTO_HTTPS)
+</pre>
+<p><br xmlns:s3="http://www.r-project.org/S3" xmlns:cpp="http://www.cplusplus.org" xmlns:xi="http://www.w3.org/2001/XInclude" xmlns="">
+This is very different from an enumeration. 
+We also want the object to identify its original components, so we add combine the names of the individual
+elements as the name of the integer value.
+So to allow both HTTP and HTTPS, we might use
+</p><div xmlns="" class="codeToggle"><div class="unhidden" id="id36293361"><div><pre class="rcode" title="R code">
+CURLPROTO_HTTP | CURLPROTO_HTTPS
+</pre></div></div></div>
+<div xmlns="" class="clearFloat"></div>
+<p>
+and we want the result to appear in R as
+</p><div xmlns="" class="codeToggle"><div class="unhidden" id="id36293365"><div><pre class="rcode" title="R code">
+CURLPROTO_HTTP,CURLPROTO_HTTPS
+                             3
+</pre></div></div></div>
+<div xmlns="" class="clearFloat"></div>
+<p>
+
+</p><p>
+To address these issues, we define two basic classes - <i xmlns:s3="http://www.r-project.org/S3" xmlns:cpp="http://www.cplusplus.org" xmlns:xi="http://www.w3.org/2001/XInclude" xmlns=""><a href="Help/EnumValue-class.html">EnumValue</a></i>
+and <i xmlns:s3="http://www.r-project.org/S3" xmlns:cpp="http://www.cplusplus.org" xmlns:xi="http://www.w3.org/2001/XInclude" xmlns=""><a href="Help/BitwiseValue-class.html">BitwiseValue</a></i>. The first is used as the root or base
+class for any new enumeration type we want to define.
+This is used for sets of simple symbolic constants represented as enumerations.
+<i xmlns:s3="http://www.r-project.org/S3" xmlns:cpp="http://www.cplusplus.org" xmlns:xi="http://www.w3.org/2001/XInclude" xmlns=""><a href="Help/BitwiseValue-class.html">BitwiseValue</a></i> is used for values that we can combine
+together into a single value as in the curl protocol example above.
+To represent the different values of the GeoIPDBTypes enumeration, we would use
+<i xmlns:s3="http://www.r-project.org/S3" xmlns:cpp="http://www.cplusplus.org" xmlns:xi="http://www.w3.org/2001/XInclude" xmlns=""><a href="Help/EnumValue-class.html">EnumValue</a></i> to define a <i xmlns:s3="http://www.r-project.org/S3" xmlns:cpp="http://www.cplusplus.org" xmlns:xi="http://www.w3.org/2001/XInclude" xmlns=""><a href="Help/GeoIPDBTypes-class.html">GeoIPDBTypes</a></i> class in R:
+
+</p><div xmlns="" class="codeToggle"><div class="unhidden" id="id36293392"><div><pre class="rcode" title="R code">
+setClass('GeoIPDBTypes', contains = 'EnumValue')
+</pre></div></div></div>
+<div xmlns="" class="clearFloat"></div>
+<p>
+We create R variables for each of the values using the corresponding 
+name in C code, e.g.,
+
+</p><div xmlns="" class="codeToggle"><div class="unhidden" id="id36293396"><div><pre class="rcode" title="R code">
+`GEOIP_COUNTRY_EDITION` &lt;- GenericEnumValue('GEOIP_COUNTRY_EDITION', 1, 'GeoIPDBTypes')
+`GEOIP_REGION_EDITION_REV0` &lt;- GenericEnumValue('GEOIP_REGION_EDITION_REV0', 7, 'GeoIPDBTypes')
+</pre></div></div></div>
+<div xmlns="" class="clearFloat"></div>
+<p>
+
+We would then define a global variable that represents the entire enumeration
+definition, containing the names of the elements and their values.
+This is used when performing conversions from numeric and string values 
+and validating values.
+And we finish the R code to handle such an enumeration by defining
+coercion methods for converting values specified by integer or numeric
+or by the symbolic name as a string. These allow us to 
+have calls of the form
+</p><div xmlns="" class="codeToggle"><div class="unhidden" id="id36293406"><div><pre class="rcode" title="R code">
+as("GEOIP_ORG_EDITION", "GeoIPDBTypes")
+as(5, "GeoIPDBTypes")
+</pre></div></div></div>
+<div xmlns="" class="clearFloat"></div>
+<p>
+</p><p>
+For a bitwise enumeration, we define the same variables.
+We inherit the <code xmlns:rs="http://www.omegahat.org/RS" xmlns:s="http://cm.bell-labs.com/stat/S4" xmlns="" class="sfunction">|</code> method for combining two
+values of this type, e.g., 
+
+</p><div xmlns="" class="codeToggle"><div class="unhidden" id="id36293417"><div><pre class="rcode" title="R code">
+GEOIP_CHECK_CACHE | GEOIP_MEMORY_CACHE
+</pre></div></div></div>
+<div xmlns="" class="clearFloat"></div>
+<p>
+which yields
+</p><pre xmlns:s3="http://www.r-project.org/S3" xmlns:cpp="http://www.cplusplus.org" xmlns:xi="http://www.w3.org/2001/XInclude" xmlns="" class="routput">
+             GEOIP_CHECK_CACHE | GEOIP_MEMORY_CACHE
+GeoIPOptions                                      3
+</pre>
+<p>
+showing the value resulting from combining of the two elements, 
+along with the name of the composition and the class of the object.
+
+
+</p><p>
+Using the <a xmlns:omg="http://www.omegahat.org" xmlns:rwx="http://www.omegahat.org/RwxWidgets" xmlns="" href="http://www.omegahat.org/RGCCTranslationUnit">RGCCTranslationUnit</a> package,
+we can resolve the enumeration definition nodes we find in the 
+data structures.  The package  attempts to determine which enumerations
+are really bitwise enumerations.
+In the case of GeoIPOptions, it recognizes that all values are a power
+of 2 and so determines that it is a bitwise enumeration and the
+resolved object is of class <i xmlns:s3="http://www.r-project.org/S3" xmlns:cpp="http://www.cplusplus.org" xmlns:xi="http://www.w3.org/2001/XInclude" xmlns=""><a href="Help/BitwiseEnumerationDefinition-class.html">BitwiseEnumerationDefinition</a></i>. 
+For the GeoIPDBTypes, the values do not suggest a bitwise enumeration and so we get
+an object of class <i xmlns:s3="http://www.r-project.org/S3" xmlns:cpp="http://www.cplusplus.org" xmlns:xi="http://www.w3.org/2001/XInclude" xmlns=""><a href="Help/EnumerationDefiniton-class.html">EnumerationDefiniton</a></i>.
+The code that does this is
+</p><div xmlns="" class="codeToggle"><div class="unhidden" id="id36293443"><div><pre class="rcode" title="R code">
+tu = parseTU("~/Projects/org/omegahat/R/GeoIP/inst/doc/Rgeoip.c.001t.tu")
+enums = getEnumerations(tu)
+TUOptions(checkBitwiseAtResolve = TRUE)
+ip.opts = resolveType(enums$GeoIPOptions, tu)
+ip.db.types = resolveType(enums$GeoIPDBTypes, tu)
+</pre></div></div></div>
+<div xmlns="" class="clearFloat"></div>
+<p>
+
+We can now turn these descriptions into R code with <i xmlns:s3="http://www.r-project.org/S3" xmlns:cpp="http://www.cplusplus.org" xmlns:xi="http://www.w3.org/2001/XInclude" xmlns="" class="rfunc"><a href="Help//genCode.html">genCode()
+  </a></i>
+
+</p></div><div class="section" title="Processing all routines and data structures"><div class="titlepage"><div><div><h2 class="title" style="clear: both"><a id="id36293454"></a>Processing all routines and data structures</h2></div></div></div><div xmlns="" class="codeToggle"><div class="unhidden" id="id36293459"><div><pre class="rcode" title="R code">
+library(Rffi); library(RGCCTranslationUnit)
+RGCCTranslationUnit:::TUOptions(checkBitwiseAtResolve = TRUE)
+tu = parseTU("~/Projects/org/omegahat/R/GeoIP/inst/doc/Rgeoip.c.001t.tu")
+funcs = getRoutines(tu)
+funcs = funcs[grepl("^GeoIP", names(funcs))]
+
+sapply(paste("../../R/", c("createRFunc.R", "tuToRType.R", "tuToFFI.R", "genCode.R", "defClasses.R"), sep = ""), source)
+
+funcs.code = lapply(funcs, function(x) createRFunc(resolveType(x, tu)))
+
+ds = getDataStructures(tu)
+ds = ds[ grepl("^GeoIP", names(ds))]
+rds = lapply(ds, resolveType, tu)
+ds.code = lapply(rds, genCode)
+</pre></div></div></div>
+<div xmlns="" class="clearFloat"></div>
+<p>
+If we want to source the code  into an existing session, we can use
+</p><div xmlns="" class="codeToggle"><div class="unhidden" id="id36293472"><div><pre class="rcode" title="R code">
+library(RGCCTUFFI)
+code = genTUInterface("inst/doc/Rgeoip.c.001t.tu", pattern = "^GeoIP")
+</pre></div></div></div>
+<div xmlns="" class="clearFloat"></div>
+<p>
+
+If we want the code so that we can put it in a package, 
+we have to be 
+
+
+</p><div xmlns="" class="codeToggle"><div class="unhidden" id="id36293477"><div><pre class="rcode" title="R code">
+code = genTUInterface("inst/doc/Rgeoip.c.001t.tu", pattern = "^GeoIP", 
+                       useClosure = TRUE, 
+                       useGlobalCIF = TRUE,
+                       useGlobalFFIType = TRUE,
+                       putGlobalsInLoad = TRUE)
+</pre></div></div></div>
+<div xmlns="" class="clearFloat"></div>
+<p>
+
+
+</p><div xmlns="" class="codeToggle"><div class="unhidden" id="id36293484"><div><pre class="rcode" title="R code">
+cat( "library(Rffi)",
+     "library(RAutoGenRunTime)",
+     ".onLoad = function(...) dyn.load('/usr/local/lib/libGeoIP.dylib')",
+     unlist(code), sep = "\n\n",
+    file = "R/RGeoIP.R")
+</pre></div></div></div>
+<div xmlns="" class="clearFloat"></div>
+<p>
+
+
+
+</p><div xmlns="" class="codeToggle"><div class="unhidden" id="id36293489"><div>
+<a class="r-code-chunk-name" name="rsample1"></a><pre class="rcode" title="R code ID: rsample1">
+db = GeoIP_open("/usr/local/share/GeoIP/GeoLiteCity.dat", GEOIP_STANDARD, FALSE)
+r = GeoIP_record_by_name(db, "www.omegahat.org", FALSE)
+r[]
+r[c("latitude", "longitude")]
+r$lat
+r[["lat"]]
+</pre>
+</div></div></div>
+<div xmlns="" class="clearFloat"></div>
+<p>
+
+</p><div xmlns="" class="codeToggle"><div class="unhidden" id="id36293496"><div>
+<a class="r-code-chunk-name" name="rsample2"></a><pre class="rcode" title="R code ID: rsample2">
+r = GeoIP_record_by_addr(db, "169.237.46.32", FALSE)
+r[]
+r[c("latitude", "longitude")]
+</pre>
+</div></div></div>
+<div xmlns="" class="clearFloat"></div>
+<p>
+
+</p><p>
+
+</p><div xmlns="" class="codeToggle"><div class="unhidden" id="id36293505"><div><pre class="rcode" title="R code">
+ll = readLines(gzfile("~/omegahat.log.gz"), n = 7000)
+addr = gsub("([^ ]+) .*", "\\1", ll)
+dup = duplicated(add)
+ip = addr[!dup]
+#ip = unique() 
+</pre></div></div></div>
+<div xmlns="" class="clearFloat"></div>
+<p>
+
+
+</p><div xmlns="" class="codeToggle"><div class="unhidden" id="id36293509"><div><pre class="rcode" title="R code">
+library(Rffi) # for isNilPointer()
+pos = sapply(ip, function(h) {
+                   r = GeoIP_record_by_addr(db, h, returnInputs = FALSE)
+                   if(isNilPointer(r))
+                     c(NA, NA)
+                   else
+                     r[c("longitude", "latitude")]
+                  })
+</pre></div></div></div>
+<div xmlns="" class="clearFloat"></div>
+<p>
+
+If we process all of the lines in omegahat.log.gz,
+we end up with 265782 unique IP addresses.
+If we time the sapply() loop below to get the locations,
+this takes 
+</p><pre xmlns:s3="http://www.r-project.org/S3" xmlns:cpp="http://www.cplusplus.org" xmlns:xi="http://www.w3.org/2001/XInclude" xmlns="" class="routput">
+    user   system  elapsed 
+1262.574   17.274 1425.822 
+</pre>
+<p>
+to process them all or 0.005 seconds 
+per IP address.
+There are 21 that cannot be matched.
+
+</p><div xmlns="" class="codeToggle"><div class="unhidden" id="id36293521"><div><pre class="rcode" title="R code">
+i = which(is.na(pos[1,]))
+ip[i]
+</pre></div></div></div>
+<div xmlns="" class="clearFloat"></div>
+<p>
+
+
+</p><pre xmlns:rs="http://www.omegahat.org/RS" xmlns:s="http://cm.bell-labs.com/stat/S4" xmlns="" class="scode" title="R plot">
+ library(maps)
+ map()
+ points(t(pos)[, c(1, 2)], pch = ".", col = "red")
+</pre>
+<p xmlns:rs="http://www.omegahat.org/RS" xmlns:s="http://cm.bell-labs.com/stat/S4" xmlns=""></p>
+<p><img xmlns="" src="">
+
+
+</p></div><div class="section"><div class="titlepage"></div><p>
+We can use the <i xmlns:s3="http://www.r-project.org/S3" xmlns:cpp="http://www.cplusplus.org" xmlns:xi="http://www.w3.org/2001/XInclude" xmlns=""><a href="http://cran.r-project.org/web/packages/Rffi/index.html">Rffi</a></i> package to create the CIF object describing this type of routine
+and then invoke it.
+
+</p><div xmlns="" class="codeToggle"><div class="unhidden" id="id36293541"><div><pre class="rcode" title="R code">
+library(Rffi)
+GeoIP_new = CIF(pointerType, list(sint32Type))
+</pre></div></div></div>
+<div xmlns="" class="clearFloat"></div>
+<p>
+
+
+</p><div xmlns="" class="codeToggle"><div class="unhidden" id="id36293544"><div><pre class="rcode" title="R code">
+ip.opts = resolveType(enums$GeoIPOptions, tu)
+</pre></div></div></div>
+<div xmlns="" class="clearFloat"></div>
+<p>
+
+
+Let's skip over the details of the bitwise enumeration for the present
+and we'll use the value of GEOIP_STANDARD:
+
+</p><div xmlns="" class="codeToggle"><div class="unhidden" id="id36293549"><div><pre class="rcode" title="R code">
+GEOIP_STANDARD = ip.opts@values["GEOIP_STANDARD"]
+</pre></div></div></div>
+<div xmlns="" class="clearFloat"></div>
+<p>
+
+
+</p><div xmlns="" class="codeToggle"><div class="unhidden" id="id36293553"><div><pre class="rcode" title="R code">
+dyn.load("/usr/local/lib/libGeoIP.dylib")
+</pre></div></div></div>
+<div xmlns="" class="clearFloat"></div>
+<p>
+
+
+So now we can call GeoIP_new
+
+</p><div xmlns="" class="codeToggle"><div class="unhidden" id="id36293557"><div><pre class="rcode" title="R code">
+ipDB = callCIF(GeoIP_new, "GeoIP_new", GEOIP_STANDARD)
+</pre></div></div></div>
+<div xmlns="" class="clearFloat"></div>
+<p>
+We probably want to define a class "GeoIP" and 
+identify this pointer as an instance of this class
+
+</p><div xmlns="" class="codeToggle"><div class="unhidden" id="id36293562"><div><pre class="rcode" title="R code">
+setClass("RCReference", representation(ref = "externalptr"))
+setClass("GeoIP", contains = "RCReference")
+</pre></div></div></div>
+<div xmlns="" class="clearFloat"></div>
+<p>
+
+
+</p><div xmlns="" class="codeToggle"><div class="unhidden" id="id36293566"><div><pre class="rcode" title="R code">
+ipDB = new("GeoIP", ref = ipDB)
+</pre></div></div></div>
+<div xmlns="" class="clearFloat"></div>
+<p>
+
+</p><p>
+
+Let's interface to the GeoIP_database_info and
+GeoIP_database_edition routines to check things are okay.
+
+</p><div xmlns="" class="codeToggle"><div class="unhidden" id="id36293573"><div><pre class="rcode" title="R code">
+GeoIP_database_info = CIF(stringType, list(pointerType), FALSE)
+GeoIP_database_edition = CIF(uint32Type, list(pointerType), FALSE)
+</pre></div></div></div>
+<div xmlns="" class="clearFloat"></div>
+<p>
+
+
+</p><div xmlns="" class="codeToggle"><div class="unhidden" id="id36293578"><div><pre class="rcode" title="R code">
+callCIF(GeoIP_database_info, "GeoIP_database_info", ipDB@ref)
+callCIF(GeoIP_database_edition, "GeoIP_database_edition", ipDB@ref)
+</pre></div></div></div>
+<div xmlns="" class="clearFloat"></div>
+<p>
+
+</p><p>
+Now let's see about calling
+GeoIP_id_by_addr or GeoIP_id_by_name.
+These have the same signature so we can use the same CIF.
+</p><div xmlns="" class="codeToggle"><div class="unhidden" id="id36293586"><div><pre class="rcode" title="R code">
+int.GeoIP_String = CIF(sint32Type, list(pointerType, stringType), c(FALSE, FALSE))
+</pre></div></div></div>
+<div xmlns="" class="clearFloat"></div>
+<p>
+Then we can call this with
+</p><div xmlns="" class="codeToggle"><div class="unhidden" id="id36293590"><div><pre class="rcode" title="R code">
+callCIF(int.GeoIP_String, "GeoIP_id_by_addr", ipDB@ref, "74.125.45.100")
+</pre></div></div></div>
+<div xmlns="" class="clearFloat"></div>
+<p>
+
+
+
+</p><p>
+Now let's look at the routine GeoIP_country_name_by_addr.
+This takes a GeoIP pointer and a string
+and returns a string. So we define the CIF as
+</p><div xmlns="" class="codeToggle"><div class="unhidden" id="id36293614"><div><pre class="rcode" title="R code">
+GeoIPString = CIF(stringType, list(pointerType, stringType))
+</pre></div></div></div>
+<div xmlns="" class="clearFloat"></div>
+<p>
+
+Now we can use this to call the routine
+
+</p><div xmlns="" class="codeToggle"><div class="unhidden" id="id36293618"><div><pre class="rcode" title="R code">
+callCIF(GeoIPString, "GeoIP_country_name_by_addr", ipDB@ref, "74.125.45.100")$value
+</pre></div></div></div>
+<div xmlns="" class="clearFloat"></div>
+<p>
+
+
+</p></div><div class="section" title="Data Structures"><div class="titlepage"><div><div><h2 class="title" style="clear: both"><a id="id36293625"></a>Data Structures</h2></div></div></div><p>
+Let's look at  GeoIP_region_by_addr.
+This returns a pointer to a GeoIPRegion object.
+This is a struct containing two elements,
+both strings of a fixed length 3, i.e. char [3].
+We can create the CIF as
+
+</p><div xmlns="" class="codeToggle"><div class="unhidden" id="id36293634"><div><pre class="rcode" title="R code">
+GeoIPRegion.GeoIP_string = CIF(pointerType, list(pointerType, stringType))
+</pre></div></div></div>
+<div xmlns="" class="clearFloat"></div>
+<p>
+
+This will allow us to call the routine and get the pointer to the GeoIPRegion.
+
+</p><div xmlns="" class="codeToggle"><div class="unhidden" id="id36293638"><div><pre class="rcode" title="R code">
+ans = callCIF(GeoIPRegion.GeoIP_string, "GeoIP_region_by_addr", ipDB@ref, "74.125.45.100")
+</pre></div></div></div>
+<div xmlns="" class="clearFloat"></div>
+<p>
+
+Now we have to be able to identify the fields in the pointer to the structure.
+We can manually examine the fields or we can use RGCCTranslationUnit to identify
+them.
+</p><div xmlns="" class="codeToggle"><div class="unhidden" id="id36293644"><div><pre class="rcode" title="R code">
+ds = getDataStructures(tu)
+geoDS = ds[ grep("^GeoIP", names(ds), value = TRUE) ]
+reg = resolveType(resolveType(geoDS[["GeoIPRegion"]], tu))
+</pre></div></div></div>
+<div xmlns="" class="clearFloat"></div>
+<p>
+
+We can extract the fields and their types.
+The names are obtained via
+</p><div xmlns="" class="codeToggle"><div class="unhidden" id="id36293649"><div><pre class="rcode" title="R code">
+names(reg@fields)
+</pre></div></div></div>
+<div xmlns="" class="clearFloat"></div>
+<p>
+
+The type of the first element is
+
+</p><div xmlns="" class="codeToggle"><div class="unhidden" id="id36293653"><div><pre class="rcode" title="R code">
+reg@fields[[1]]@type
+</pre></div></div></div>
+<div xmlns="" class="clearFloat"></div>
+<p>
+and this is an ArrayType. It contains the  length and
+element type of the array.
+</p></div></div></body></html>

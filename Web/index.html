@@ -1,0 +1,60 @@
+<!DOCTYPE HTML PUBLIC "-//IETF//DTD HTML//EN">
+<html> <head>
+<link rel="stylesheet" href="http://www.omegahat.org/OmegaTech.css">
+<meta name="description" content="R interface to libffi"/>
+<meta name="keywords" content="R, libffi, dynamic, invocation, compiled"/>
+<title>GeoIP: find the location of a machine on the internet</title>
+</head>
+
+<body>
+<h1>The RGCCTUFFI package</h1>
+<p align=right>Last Release:
+ <a href="GeoIP_0.1-0.tar.gz"> 0.1-0</a> (<font color="red">26 Jan 2011</font>)
+
+
+<p>
+This package provides facilties to
+locate an
+
+
+
+<h2>Documentation</h2>
+There are simple, programmatically generated help pages for all of the
+functions in the package.
+There are some PDF &amp; HTML versions of documents
+about how the code was generated via the
+<a href="../RGCCTUFFI">RGCCTUFFI</a>
+package and these also contain some examples.
+
+<p>
+Simple but relatively comprehensive examples  of how to use the
+primary functions in the package are:
+<pre>
+db = GeoIP_open(, GEOIP_STANDARD, FALSE)
+r = GeoIP_record_by_name(db, "www.omegahat.org", FALSE)
+names(r)
+r[]
+r[c("latitude", "longitude")]
+r$lat
+r[["lat"]]
+</pre>
+
+
+<pre>
+r = GeoIP_record_by_addr(db, "169.237.46.32", FALSE)
+r[]
+r[c("latitude", "longitude")]
+</pre>
+
+<p>
+Rather than having to know whether the host is identified by
+name or IP address, you can use the <b class="rfunction">getIPPos()</b> function.
+
+
+<hr>
+<address><a href="http://www.stat.ucdavis.edu/~duncan/">Duncan Temple Lang</a>
+<a href=mailto:duncan@wald.ucdavis.edu>&lt;duncan@wald.ucdavis.edu&gt;</a></address>
+<!-- hhmts start -->
+Last modified: Wed Jan 26 09:23:33 PST 2011
+<!-- hhmts end -->
+</body> </html>

@@ -1,0 +1,1128 @@
+<?xml version="1.0"?>
+<article xmlns:r="http://www.r-project.org"
+         xmlns:xi="http://www.w3.org/2003/XInclude"
+	xmlns:c="http://www.C.org"
+	xmlns:sh="http://www.shell.org"
+	xmlns:omg="http://www.omegahat.org">
+
+<articleinfo>
+
+<title>Accessing the GeoIP library from R with <omg:pkg>Rffi</omg:pkg>
+and <omg:pkg>RGCCTranslationUnit</omg:pkg></title>
+
+<author><firstname>Duncan</firstname><surname>Temple Lang</surname>
+  <affiliation><orgname>University of California at Davis</orgname>
+               <orgdiv>Department of Statistics</orgdiv>
+  </affiliation>
+</author>
+</articleinfo>
+
+
+<section>
+<title>The GeoIP library</title>
+
+
+<para>
+The <ulink url="http://www.maxmind.com/app/geolitecity">GeoIP library</ulink> from
+<ulink url="http://www.maxmind.com">MaxMind</ulink> is an Open Source
+library that maps Internet Protocol addresses to estimated latitude and longitude,
+city and  county values. (<ulink url="http://www.maxmind.com">MaxMind</ulink> also provides
+a more accurate commercial version of the database.)
+This ability to take an IP address and get its location is useful in many data analysis applications.
+One example is doing intrusion detection on network traffic packets.
+Another is drawing a map of visitors to a Web site by analyzing web logs.
+</para>
+
+
+<para>
+Before we can use the GeoIP C library, we need to both understand the
+basic programming model/interface and then we need to build the bindings
+from R to the C code.
+We will use the <omg:pkg>RGCCTranslationUnit</omg:pkg> package
+to programmatically obtain a description of the C-level API.
+We will use <omg:pkg>Rffi</omg:pkg> to invoke the routines.
+So all that remains before getting started is to get an understanding of the
+programming model.
+We can pass an IP address either as a number, a "dotted-quad" or by
+host name such as "cran.r-project.org". For each operation in the
+C library, there are 3 routines corresponding to these different
+input types. The names of the routines end in _ipnum, _addr and _name,
+respectively.
+We can use IP V6 or regular IP V4 addresses and the IPV6 routines
+have a _v6 suffix (following the _ipnum, _addr or _name).
+So to get the name of an IP address's country, we can use
+<c:routine>GeoIP_country_code_by_ipnum</c:routine>,
+<c:routine>GeoIP_country_code_by_addr</c:routine>
+or
+<c:routine>GeoIP_country_code_by_name</c:routine>
+</para>
+
+<para>
+Each routine takes a pointer to the GeoIP "database" or agent
+and then the IP address in the appropriate form.
+To be able to use any of these routines, we must first
+create a GeoIP instance and obtain a reference to it.
+We do this with <c:routine>GeoIP_new</c:routine>.
+When we are finished with this, we can use
+<c:routine>GeoIP_delete</c:routine> to clean up the memory
+associated with it.
+There are other routines that give us more flexibility, but these are all we need for now.
+</para>
+
+
+<para>
+The following is pseudo, heuristic, informal sample  C code that we might use
+to interact with the library as if we were writing interactively without declarations.
+<c:code><![CDATA[
+db = GeoIP_new(GEOIP_STANDARD)
+r = GeoIP_record_by_addr(db, "169.237.46.32")
+r->latitude
+r->longitude
+r = GeoIP_record_by_name(db, "www.omegahat.org")
+r->city
+r->postal_code
+r->country_code
+]]></c:code>
+The <c:func>GeoIP_record_by_addr</c:func> routine returns
+a pointer to a C struct with 12 different fields identifying
+the location of the IP address.
+</para>
+
+
+</section>
+
+<section>
+<title>Manually Interfacing to the C library with <omg:pkg>Rffi</omg:pkg></title>
+
+<para>
+We'll start by manually creating the FFI-based interface to the routines
+in the pseudo C code above.
+First, we need to define a call interface (CIF) for <c:func>GeoIP_new</c:func>.
+This takes an integer and returns a pointer to a <c:struct>GeoIP</c:struct>
+object. We can treat that as an opaque data type  and we don't need to
+know about its contents.  We just pass it to the other routines we will invoke.
+So we can define the CIF as
+
+<r:code>
+library(Rffi)
+GeoIP_new_cif = CIF(pointerType, list(sint32Type))
+</r:code>
+
+Next we need to know the appropriate value to pass as the integer argument.
+By reading the documentation or examples, we see that it is a combination of
+one or more options from the GeoIPOptions enumeration. We'll just use
+the GEOPI_STANDARD value which is 0. We'll talk later about how we can use
+the symbolic names for these enumerations to make the code clearer and more robust.
+So now we are ready to call the routine.
+The first thing to do is load the GeoIP library.
+The details will differ on your machine but on a Mac OS X box, we can use
+<r:code>
+dyn.load("/usr/local/lib/libGeoIP.dylib")
+</r:code>
+(We can use <r:code>.Platform$dylib.ext</r:code> to find the appropriate
+extension. /usr/local/lib is a reasonable place to expect the library
+to be located, but it is not guaranteed.)
+
+</para>
+<para>
+So now we have loaded the routines, we can invoke <c:func>GeoIP_new</c:func>
+with
+<r:code>
+db = callCIF(GeoIP_new_cif, "GeoIP_new", 0L)
+</r:code>
+<r:var>db</r:var> is a simple external pointer object in R.
+This is very "raw" as it stands and we probably want to 
+create a class to represent that this is a GeoIP pointer object
+and create a function to hide the details of calling
+GeoIP_new.
+But we'll come back to this niceties later.
+</para>
+
+<para>
+Next we want to invoke <c:func>GeoIP_record_by_addr</c:func>.
+So again we need create a CIF for this signature.
+This takes a pointer (to a GeoIP object)
+and a string giving the dotted-quad IP address.
+The routine returns a pointer to a GeoIPRecord structure.
+This is defined in the GeoIPCity.h header file as
+<programlisting><![CDATA[
+typedef struct GeoIPRecordTag {
+	char *country_code;
+	char *country_code3;
+	char *country_name;
+	char *region;
+	char *city;
+	char *postal_code;
+	float latitude;
+	float longitude;
+	union {
+	  int metro_code; /* metro_code is a alias for dma_code */
+	  int dma_code;
+        };
+	int area_code;
+	int charset;
+	char *continent_code;
+} GeoIPRecord;
+]]></programlisting>
+We don't have to deal with this stuct quite yet.
+Instead, we need only define the CIF as returning a pointer.
+So our CIF is created as
+
+<r:code>
+GeoIP_record_by_addr_cif = CIF(pointerType, list(db = pointerType, addr = stringType))
+</r:code>
+The name of the R variable used to store the CIF is irrelevant, of course.
+I am using the name of the routine with a _cif suffix for clarity so we know  what the value is for.
+But of course, this same CIF could be used with any routine with the same signature.
+</para>
+<para>
+Now we can call the routine
+
+<r:code>
+r = callCIF(GeoIP_record_by_addr_cif, "GeoIP_record_by_addr", db, "169.237.46.32")
+</r:code>
+
+With this, we find we get an error from GeoIP
+<r:error>
+Invalid database type GeoIP Country Edition, expected GeoIP City Edition, Rev 1
+</r:error>
+This is because I am using the city-level API on the country database.
+I need to install the city database. 
+We'll take a slight detour and show how to make a call to find the country of
+an IP address and then return to dealing with the city database.
+
+</para>
+
+
+<para>
+In the GeoIP.h header file, there is a routine
+<c:func>GeoIP_country_code_by_addr</c:func>.
+This has a very similar signature as 
+<c:func>GeoIP_record_by_addr</c:func> but returns
+the name of the country in which the IP address is located.
+So we can create a new CIF and invoke this routine:
+
+<r:code>
+cif = CIF(stringType, list(db = pointerType, addr = stringType))
+country = callCIF(cif, "GeoIP_country_code_by_addr", db, "169.237.46.32")
+</r:code>
+If we look at the R object <r:var>country</r:var>, 
+we see it is a list with two elements named "value" and "inputs".
+<r:code>country$value</r:code> is the return value and gives us the
+name of the country - "US".
+The second element - "inputs" - is the <r:var>db</r:var> argument
+to the routine.  Since that is a pointer, the routine may have modified
+its contents. So <r:func>callCIF</r:func> returns that. 
+We know that any updates will be see in the R variable <r:var>db</r:var>
+and also we think that it is actually not modified in the routine.
+So when creating the CIF, we can say that this is not mutable.
+Alternatively,  in the call to <r:func>callCIF</r:func>, we can tell
+it not to return the inputs.
+So
+
+<r:code>
+country = callCIF(cif, "GeoIP_country_code_by_addr", db, "169.237.46.32", returnInputs = FALSE)
+</r:code>
+returns just the country name as a string.
+And 
+<r:code>
+cif = CIF(stringType, list(db = pointerType, addr = stringType), mutable = c(FALSE, FALSE))
+country = callCIF(cif, "GeoIP_country_code_by_addr", db, "169.237.46.32")
+</r:code>
+also returns just the string.
+Setting the mutability of the parameters in the CIF is a stronger
+statement as this applies to all routines we call with the same CIF.
+</para>
+
+
+<para>
+Now let's return to the issue of the city database.
+You can download this from <ulink url="http://www.maxmind.com/app/geolitecity"/>.
+Follow the download and installation instructions there.
+We need to tell our GeoIP "server" which database to use. 
+<c:func>GeoIP_new</c:func> is a little too simple as we cannot
+control the choice of database.
+Looking in the GeoIP.h header file, we see three potentially promising
+routines:
+<c:code>
+GEOIP_API int GeoIP_db_avail(int type);
+GEOIP_API GeoIP* GeoIP_open_type (int type, int flags);
+GEOIP_API GeoIP* GeoIP_open(const char * filename, int flags);
+</c:code>
+If type identifies which database to open, we can check whether
+the database is available and use that with 
+GeoIP_open_type. If we have the database file in
+a non-standard location, we can use GeoIP_open to provide the
+full file name.
+</para>
+<para>
+The type should be one of the GeoIPDBTypes enumerated values
+and we can try GEOIP_CITY_EDITION_REV1 (with a value of 2)
+as the possible option.
+So let's create a CIF for calling GeoIP_db_avail and call that:
+<r:code>
+callCIF(CIF(sint32Type, list(sint32Type)), "GeoIP_db_avail", 2L)
+</r:code>
+This returns 0, i.e. not available for me. We can try the different options,
+but GeoIP seems to only see the country database.
+So let's try to load the file by name.
+</para>
+<para>
+We need to create a CIF for  GeoIP_open and invoke it:
+
+<r:code>
+cif = CIF(pointerType, list(stringType, sint32Type))
+db_city = callCIF(cif, "GeoIP_open", "/usr/local/share/GeoIP/GeoLiteCity.dat", 0L)
+</r:code>
+This successfully returns a pointer. So now we can return to obtaining
+a record:
+
+<r:code>
+r = callCIF(GeoIP_record_by_addr_cif, "GeoIP_record_by_addr", db_city, "169.237.46.32")
+</r:code>
+And this also returns successfully. We probably don't want the mutable inputs so 
+we can change our call
+
+<r:code>
+r = callCIF(GeoIP_record_by_addr_cif, "GeoIP_record_by_addr", db_city, "169.237.46.32", returnInputs = FALSE)
+</r:code>
+Now we have the record which is a pointer to the 12-element struct displayed above. 
+Since we want to access fields in that struct, we need to create a description
+of the types of elements in the struct. We can do this programmatically, but for
+now we will do it manually.
+</para>
+<para>
+We need to create a new type similar to sint32Type, stringType, etc.
+but for describing this particular GeoIPRecord structure.
+We use the function  <r:func>structType</r:func> to do this.
+We pass it an ordered list of the types of the fields in the struct.
+So for this struct, we would use R code something like
+
+<r:code>
+GeoIPRecord_type =
+            structType(list(stringType, # country_code
+                           stringType, # country_code3
+                           stringType, # country_name
+                           stringType, # region
+                           stringType, # city
+                           stringType, # postal_code
+                           floatType,  # latitude
+                           floatType,  # longitude
+                           sint32Type, # the union element
+                           sint32Type, # area_code
+                           sint32Type, # charset
+                           stringType # continent_code
+                          ))
+</r:code>
+
+Now that we have this description, we can use it to
+have <omg:pkg>Rffi</omg:pkg> retrieve individual
+fields from the pointer to the struct or 
+copy all of the fields to an R list.
+The two functions to do this are
+<r:func>getStructField</r:func>
+and <r:func>getStructValue</r:func>.
+We will access the latitude and longitude fields.
+Unfortunately, we didn't put names on the elements
+of the struct description so R doesn't know
+how to match latitude to the 7th element.
+So we can use the index of the element using
+<r:code>
+getStructField(r, 7, GeoIPRecord_type)
+</r:code>
+and we get our value.
+Similarly, we can get the city name with
+<r:code>
+getStructField(r, 5, GeoIPRecord_type)
+</r:code>
+Using indices is not a good idea. So we should put names on the elements
+in the list we pass to <r:func>structType</r:func>:
+
+<r:code>
+GeoIPRecord_type =
+           structType(list(country_code = stringType, 
+                           country_code3 = stringType,  
+                           country_name = stringType,  
+                           region = stringType,  
+                           city = stringType,  
+                           postal_code = stringType,  
+                           latitude = floatType,   
+                           longitude = floatType, 
+                           "?" = sint32Type,  # the union element
+                           area_code = sint32Type, 
+                           charset = sint32Type,  
+                           continent_code = stringType 
+                          ))
+
+</r:code>
+
+Now we can use a name to access the field:
+<r:code>
+getStructField(r, "latitude", GeoIPRecord_type)
+getStructField(r, "city", GeoIPRecord_type)
+</r:code>
+
+We can even get multiple values in a single call:
+<r:code>
+getStructField(r, c("latitude", "city", "region"), GeoIPRecord_type)
+</r:code>
+
+
+</para>
+<para>
+There are lots of other things we can look at in the API
+that are more complex, e.g. GeoIP_next_record, GeoIPRegion struct
+and fixed length arrays, the union, etc., but we will return to those later.
+For now we have the information we want from GeoIP and
+we are working with simple/built-in data types and a single struct.
+If we wanted to access the fields in the GeoIP object, we would
+describe its structure in the same way as for the GeoIPRecord.
+This would give us access to the name of the file,  when it was
+last updated, etc.
+</para>
+
+<para>
+We will take a brief look at how we can access global variables.
+libGeoIP has several global variables which are strings or
+arrays of strings or pointers to strings.
+For example, GeoIPDBFileName is a pointer to a string,
+GeoIPDBFileName is a string and GeoIP_country_code
+is an array of 253 strings of length 3.
+Once we describe the type of the variabe, we can use
+<r:func>getNativeValue</r:func> to retrieve the value of
+the object. This will convert the C value to an R object
+using the same conversion mechanism as  used in converting
+the return value via <r:func>callCIF</r:func>.
+</para>
+<para>
+So let's find the value of  GeoIPDBFileName:
+
+<r:code>
+getNativeValue("GeoIPDBFileName", stringType)
+</r:code>
+<note><para>Come back to this and accessing arrays in R by indexing, etc.</para></note>
+</para>
+
+</section>
+
+
+<section>
+<title>Cleaning up the CIF interfaces</title>
+
+<para>
+Before we turn our attention to how we might automate a lot of the
+work we did above, we will think about how we might like to have  the
+R interface to these routines and data structures.
+Firstly, we want to hide the create of the CIFs and the calls to <r:func>callCIF</r:func>
+and provide R functions that are direct proxies for the C routines with all
+these details inside the R functions.
+Secondly, we would like to define classes for the pointers that are returned
+so we can identify the type of object to which they point.
+We also would like to have <r:op>$</r:op> and <r:op>[[</r:op> operators
+for accessing fields in a struct rather than having to cal
+<r:func>getStructField</r:func>.
+Additionally, if we are making repeated calls to the same routine, we
+don't want to incur the  penalty of having to find the address of the routine
+in each call. So our functions should cache that on the first call or when they
+are defined. We can do this with closures or a global variable.
+</para>
+
+</section>
+
+
+<section id="gcctu">
+<title>Automating the Interface Generation</title>
+
+<r:code>
+invisible(sapply(c("const.R", "createRFunc.R", "defClasses.R", "tuTORType.R", "tuToFFI.R"), source))
+</r:code>
+
+
+<para>
+We now turn our attention to how we can programmatically
+obtain descriptions of C routines and data structures and
+then use these to create CIFs and struct types so that we don't have to
+manually build the interface between R and C code.
+We use the <omg:pkg>RGCCTranslationUnit</omg:pkg> package to read 
+the C code. (We could use RCIndex, but that is still a work in progress.)
+We first create a simple C file that merely includes the GeoIP.h and 
+GeoIPCity header file.
+<c:code>
+<xi:include href="Rgeoip.c" parse="text"/>
+</c:code>
+
+Then we generate the TU output from gcc with
+<sh:code>
+gcc -fdump-translation-unit -o /dev/null -c Rgeoip.c
+</sh:code>
+
+Now we can read this translation unit into R:
+<r:code>
+library(RGCCTranslationUnit)
+tu = parseTU("~/Projects/org/omegahat/R/GeoIP/inst/doc/Rgeoip.c.001t.tu")
+</r:code>
+We are interested in the routines, so let's find all of them
+and then get the subset for the GeoIP interface:
+<r:code>
+funcs = getRoutines(tu)
+funcs = funcs[ grep("^GeoIP", names(funcs), value = TRUE) ]
+</r:code>
+</para>
+
+<para>
+We will also be interested in the different enumerations
+used in the code, so let's find those also.
+<r:code>
+enums = getEnumerations(tu)
+names(enums)
+</r:code>
+</para>
+
+<para>
+From the work we did manually, we are interested in
+the routines <c:func>GeoIP_open</c:func> and <c:func>GeoIP_record_by_addr</c:func>.
+Because we want to access the fields in the struct returned by
+<c:func>GeoIP_record_by_addr</c:func>, we will be interested
+in the GeoIPRecord structure. We'll come by that passively when
+finding out about the signature for <c:func>GeoIP_record_by_addr</c:func>.
+</para>
+
+<para>
+Let's start with <c:func>GeoIP_open</c:func>.  We have the node in the
+translation unit graph that corresponds to this routine's
+declaration. We now want to pull together all the information about
+the pieces of this routine and we use <r:func>resolveType</r:func> for
+this.  We pass it the node and the translation unit so it can follow
+all the relevant links:
+<r:code>
+ip.open = resolveType(funcs[["GeoIP_open"]], tu)
+ip.open
+</r:code>
+Note that the names of the parameters aren't available in the TU from GCC
+and we use simple numbers!
+</para>
+
+
+<para>
+We can see the types of the parameters printed on the console,
+but now we want to programmatically access them and map to the 
+corresponding FFI types.
+We can loop over the parameters, fetch the type of each
+and pass this to <r:func>gccTUTypeToFFI</r:func>.
+As the name suggests, the function maps a GCC-TU type
+to the corresponding FFI type.
+So our code to get the inputs for creating the CIF for the routine is
+<r:code>
+parmTypes = lapply(ip.open$parameters, function(x) gccTUTypeToFFI(x$type))
+rt = gccTUTypeToFFI(ip.open$returnType)
+</r:code>
+Now we can create the CIF:
+
+<r:code>
+ip.open.cif = CIF(rt, parmTypes)
+</r:code>
+We may want to add information about whether the parameters are mutable or not
+by looking for const declarations.
+</para>
+<para>
+Next we will create an R function named GeoIP_open
+and have it accept 2 parameters and call the corresponding C routine.
+Our function can be built from the description of the routine <r:var>ip.open</r:var>.
+The function needs to know the name of the R variable containing the relevant CIF, i.e. oip.open.cif,
+or alternatively create the CIF itself, either once or each time the function is  called.
+The function then merely invokes <r:func>callCIF</r:func>, passing the 2 arguments it receives.
+So the function would be 
+<r:function><![CDATA[
+GeoIP_open = function(x1, x2, ..., .cif = ip.open.cif) {
+   callCIF(.cif, ip.open.cif, "GeoIP_open", x1, x2, ...)
+}
+]]></r:function>
+(The fact that the parameter names are lost in the translation unit is a pity. We are working
+on an approach where they are not.)
+Note that we have allowed the caller to specify a different CIF should she want.
+We have also provided a ... argument to allow arguments to be passed on to
+<r:func>callCIF</r:func>, i.e. <r:arg>returnInputs</r:arg> and any others we add.
+Instead of referring to a variable that contains the CIF, we could
+provide an expression to create the CIF as the default value for <r:arg>.cif</r:arg>.
+To do this, we would get not the CIF types for the parameters and return type, but
+rather then names of these variables and create the call to <r:func>CIF</r:func>
+with the elements explicitly articulated, i.e.
+
+<r:code eval="false">
+GeoIP_open = function(x1, x2, ..., 
+                       .cif = .cif = CIF(pointerType, list(stringType, sint32Type))) {
+   .........
+}
+</r:code>
+</para>
+
+<para>
+Our function should also convert the result to an explicit reference
+to a GeoIP object.  We should define a class, say
+<r:class>GeoIP_ref</r:class>, which is a sub-class of
+<r:class>RCReference</r:class>, and turn the pointer into an instance
+of this class.
+We should define methods for the $ and [[ operators for this reference class
+to access individual fields using <r:func>getStructField</r:func>.
+Since a GeoIP object is a struct in C, we should also
+define a class in R that mirrors that struct and has the same slots.
+We should also provide a  coercion method to transfer a C reference
+to a GeoIP object to the R type by calling <r:func>getStructValue</r:func>.
+So mapping this routine to an R function involves a lot of peripheral 
+functions that are done just once for each "complex" data structure.
+</para>
+
+
+<para>
+We want to write a function that will take a GCC-TU description 
+of a routine and create the R code to call that routine, i.e. the routine
+above. 
+</para>
+
+
+
+
+<para>
+Of course, in creating our CIF and function and methods, we have had
+to do some programming using the translation unit code. The amount of
+effort is at least as much as when we did it manually by reading the
+header file ourselves, although we have a much cleaner and more
+comprehensive interface.  The important thing to recognize, however,
+is that we can automate this. While we did go through all the steps in
+detail, these can be put into a function to create the CIF for an
+arbitrary routine.  And since we have information for all the
+routines, we can generate CIFs for the entire GeoIP library, or any C
+library for that matter.
+</para>
+
+
+<para>
+The <omg:pkg>RGCCTranslationUnit</omg:pkg> package
+provides the functions to create the R code described
+above for arbitrary routines and structure definitions.
+We can use them as follows to create an interface
+to GeoIP_open and GeoIP_record_by_addr:
+
+
+<r:code id="gen"><![CDATA[
+ip.open = resolveType(funcs[["GeoIP_open"]], tu)
+define(createRFunc(ip.open))
+define(defStructClass(ip.open$returnType@type)) 
+record = resolveType(funcs[["GeoIP_record_by_addr"]], tu)
+define(createRFunc(record))
+define(defStructClass(record$returnType@type))
+]]></r:code>
+
+We can find out what classses and functions were defined with
+<r:code>
+getClasses(globalenv())
+ls(pattern = "^GeoIP")
+</r:code>
+We used closures, so all of the CIF and struct type definitions
+were made locally within the 
+</para>
+<para>
+The next thing we might want to do is write the generated code
+to a file so that we can use it in other R sessions.
+Instead of calling <r:func>define</r:func>, we can store the
+generated code and then use <r:func>cat</r:func> to write it to
+a file.
+So we generate it as follows:
+<r:code>
+code= list(createRFunc(ip.open),
+           defStructClass(ip.open$returnType@type) ,
+           createRFunc(record),
+           defStructClass(record$returnType@type))
+</r:code>
+Then we can write it with
+
+<r:code>
+cat("library(Rffi)",
+    "dyn.load('/usr/local/lib/libGeoIP.dylib')", 
+    unlist(code), sep = "\n", file = "geoIP.R")
+</r:code>
+
+</para>
+<para>
+
+Now that everything is defined, we can  load the
+DSO and call the functions
+
+<r:code eval="false" id="rinterface">
+dyn.load("/usr/local/lib/libGeoIP.dylib")
+db = GeoIP_open("/usr/local/share/GeoIP/GeoLiteCity.dat", 0L, FALSE)
+class(db)
+r = GeoIP_record_by_addr(db, "169.237.46.32", FALSE)
+class(r)
+names(r)
+r$city
+r$area_code
+r$latitude 
+r$longitude
+</r:code>
+
+</para>
+
+<para>
+The following code takes 1000 IP addresses from a web log and
+gets the city for each:
+<!-- the ip1000.rda fie is in RGCCTUFFI/inst/TU -->
+<r:code eval="false">
+load("ip1000.rda")
+o = sapply(ip, function(i) GeoIP_record_by_addr(db, i, returnInputs = FALSE)$city)
+</r:code>
+
+
+</para>
+</section>
+<section>
+<title>Enumerations</title>
+
+<para>
+We have looked at working with routines and different data structures.
+We now return to enumerations and symbolic constants.
+We saw the GeoIPOptions data type which are values we pass
+to <c:func>GeoIP_open</c:func> or <c:func>GeoIP_new</c:func>.
+The possible values are GEOIP_STANDARD, GEOIP_MEMORY_CACHE,
+GEOIP_CHECK_CACHE, GEOIP_INDEX_CACHE and GEOIP_MMAP_CACHE.
+These labels correspond to the values 0, 1, 2, 4, and 8,
+respectively, but of course the names are far more suggestive of the
+meaning.  As a result, we want to use the symbolic names in R.
+So we can define  R variables with the same names and values:
+
+<r:code>
+GEOIP_STANDARD = 0L 
+GEOIP_MEMORY_CACHE = 1L
+GEOIP_CHECK_CACHE = 2L
+GEOIP_INDEX_CACHE = 4L
+GEOIP_MMAP_CACHE = 8L
+</r:code>
+Note that we have explicitly made these integers.
+</para>
+
+<para>
+There are three aspects of this we want to consider.  The first is
+somewhat cosmetic and a matter of convenience.  All of these values
+start with the string "GEOIP_".  It would be more convenient to
+optionally refer to the values without this common prefix,
+e.g. STANDARD, MEMORY_CACHE, etc.  Secondly, while the GeoIP API
+declares the flag parameter type as <c:type>int</c:type>, we should
+use explicit enumeration types when this is what is expected. This
+helps to catch errors in the code and is also clearer.  If a routine
+is declared with an enumeration parameter, we must be able to validate
+the value as being from the set of possible values.  We can achieve
+this by defining a class for the enumeration type in R and defining
+coercion methods from integers or names to the actual value.
+Furthermore, we can use the symbolic names on the integer values to
+make the values more intelligible for humans to read.  The third issue
+is that not all enumerations are simple mutually exclusive options.
+Some enumerations are intended to be combined together as bitwise-AND
+values and then compared to the individual possible values via bitwise
+OR operations.  This is typically done using powers of 2 for the
+values to set individual bits. 
+This might be done with an enumeration in which the values for the individual
+elements are explicitly specified, e.g.
+<c:code>
+enum {
+ CURLPROTO_HTTP = 1,
+ CURLPROTO_HTTPS = 2,
+ CURLPROTO_FTP = 4,
+ CURLPROTO_FTPS = 8,
+  ...
+};
+</c:code>
+or with a collection of pre-processor #define directives, e.g.,
+<c:code><![CDATA[
+#define CURLPROTO_HTTP   (1<<0)
+#define CURLPROTO_HTTPS  (1<<1)
+#define CURLPROTO_FTP    (1<<2)
+#define CURLPROTO_FTPS   (1<<3)
+ ...
+]]></c:code>.
+These come from libcurl and relate to the different protocols.
+</para>
+<para>
+A critical different between these and enumerations is that we combine two of these values
+via an OR operation and we obtain a new and permissible value.  
+For example, we can query whether the protocol to be used includes
+HTTP or HTTPS with 
+<c:code><![CDATA[ 
+  protocol & (CURLPROTO_HTTP | CURLPROTO_HTTPS)
+]]></c:code>
+This is very different from an enumeration. 
+We also want the object to identify its original components, so we add combine the names of the individual
+elements as the name of the integer value.
+So to allow both HTTP and HTTPS, we might use
+<r:code>
+CURLPROTO_HTTP | CURLPROTO_HTTPS
+</r:code>
+and we want the result to appear in R as
+<r:code>
+CURLPROTO_HTTP,CURLPROTO_HTTPS
+                             3
+</r:code>
+
+</para>
+<para>
+To address these issues, we define two basic classes - <r:class>EnumValue</r:class>
+and <r:class>BitwiseValue</r:class>. The first is used as the root or base
+class for any new enumeration type we want to define.
+This is used for sets of simple symbolic constants represented as enumerations.
+<r:class>BitwiseValue</r:class> is used for values that we can combine
+together into a single value as in the curl protocol example above.
+To represent the different values of the GeoIPDBTypes enumeration, we would use
+<r:class>EnumValue</r:class> to define a <r:class>GeoIPDBTypes</r:class> class in R:
+
+<r:code>
+setClass('GeoIPDBTypes', contains = 'EnumValue')
+</r:code>
+We create R variables for each of the values using the corresponding 
+name in C code, e.g.,
+
+<r:code><![CDATA[
+`GEOIP_COUNTRY_EDITION` <- GenericEnumValue('GEOIP_COUNTRY_EDITION', 1, 'GeoIPDBTypes')
+`GEOIP_REGION_EDITION_REV0` <- GenericEnumValue('GEOIP_REGION_EDITION_REV0', 7, 'GeoIPDBTypes')
+]]></r:code>
+
+We would then define a global variable that represents the entire enumeration
+definition, containing the names of the elements and their values.
+This is used when performing conversions from numeric and string values 
+and validating values.
+And we finish the R code to handle such an enumeration by defining
+coercion methods for converting values specified by integer or numeric
+or by the symbolic name as a string. These allow us to 
+have calls of the form
+<r:code>
+as("GEOIP_ORG_EDITION", "GeoIPDBTypes")
+as(5, "GeoIPDBTypes")
+</r:code>
+</para>
+<para>
+For a bitwise enumeration, we define the same variables.
+We inherit the <r:op>|</r:op> method for combining two
+values of this type, e.g., 
+
+<r:code>
+GEOIP_CHECK_CACHE | GEOIP_MEMORY_CACHE
+</r:code>
+which yields
+<r:output>
+             GEOIP_CHECK_CACHE | GEOIP_MEMORY_CACHE
+GeoIPOptions                                      3
+</r:output>
+showing the value resulting from combining of the two elements, 
+along with the name of the composition and the class of the object.
+
+
+</para>
+<!--
+<para>
+<note><para>Problem here</para></note>
+The 
+
+
+We define methods for 
+
+</para>
+-->
+<para>
+Using the <omg:pkg>RGCCTranslationUnit</omg:pkg> package,
+we can resolve the enumeration definition nodes we find in the 
+data structures.  The package  attempts to determine which enumerations
+are really bitwise enumerations.
+In the case of GeoIPOptions, it recognizes that all values are a power
+of 2 and so determines that it is a bitwise enumeration and the
+resolved object is of class <r:class>BitwiseEnumerationDefinition</r:class>. 
+For the GeoIPDBTypes, the values do not suggest a bitwise enumeration and so we get
+an object of class <r:class>EnumerationDefiniton</r:class>.
+The code that does this is
+<r:code>
+tu = parseTU("~/Projects/org/omegahat/R/GeoIP/inst/doc/Rgeoip.c.001t.tu")
+enums = getEnumerations(tu)
+TUOptions(checkBitwiseAtResolve = TRUE)
+ip.opts = resolveType(enums$GeoIPOptions, tu)
+ip.db.types = resolveType(enums$GeoIPDBTypes, tu)
+</r:code>
+
+We can now turn these descriptions into R code with <r:func>genCode</r:func>
+
+</para>
+
+</section>
+<section>
+<title>Processing all routines and data structures</title>
+
+
+<r:code eval="false">
+library(Rffi); library(RGCCTranslationUnit)
+RGCCTranslationUnit:::TUOptions(checkBitwiseAtResolve = TRUE)
+tu = parseTU("~/Projects/org/omegahat/R/GeoIP/inst/doc/Rgeoip.c.001t.tu")
+funcs = getRoutines(tu)
+funcs = funcs[grepl("^GeoIP", names(funcs))]
+
+sapply(paste("../../R/", c("createRFunc.R", "tuToRType.R", "tuToFFI.R", "genCode.R", "defClasses.R"), sep = ""), source)
+
+funcs.code = lapply(funcs, function(x) createRFunc(resolveType(x, tu)))
+
+ds = getDataStructures(tu)
+ds = ds[ grepl("^GeoIP", names(ds))]
+rds = lapply(ds, resolveType, tu)
+ds.code = lapply(rds, genCode)
+</r:code>
+
+<para>
+If we want to source the code  into an existing session, we can use
+<r:code>
+library(RGCCTUFFI)
+code = genTUInterface("inst/doc/Rgeoip.c.001t.tu", pattern = "^GeoIP")
+</r:code>
+
+If we want the code so that we can put it in a package, 
+we have to be 
+
+
+<r:code eval="false">
+code = genTUInterface("inst/doc/Rgeoip.c.001t.tu", pattern = "^GeoIP", 
+                       useClosure = TRUE, 
+                       useGlobalCIF = TRUE,
+                       useGlobalFFIType = TRUE,
+                       putGlobalsInLoad = TRUE)
+</r:code>
+
+
+<r:code>
+cat( "library(Rffi)",
+     "library(RAutoGenRunTime)",
+     ".onLoad = function(...) dyn.load('/usr/local/lib/libGeoIP.dylib')",
+     unlist(code), sep = "\n\n",
+    file = "R/RGeoIP.R")
+</r:code>
+
+
+
+<r:code id="rsample1">
+db = GeoIP_open("/usr/local/share/GeoIP/GeoLiteCity.dat", GEOIP_STANDARD, FALSE)
+r = GeoIP_record_by_name(db, "www.omegahat.org", FALSE)
+r[]
+r[c("latitude", "longitude")]
+r$lat
+r[["lat"]]
+</r:code>
+
+<r:code id="rsample2">
+r = GeoIP_record_by_addr(db, "169.237.46.32", FALSE)
+r[]
+r[c("latitude", "longitude")]
+</r:code>
+
+</para>
+<para>
+
+<r:code>
+ll = readLines(gzfile("~/omegahat.log.gz"), n = 7000)
+addr = gsub("([^ ]+) .*", "\\1", ll)
+dup = duplicated(add)
+ip = addr[!dup]
+#ip = unique() 
+</r:code>
+
+
+<r:code>
+library(Rffi) # for isNilPointer()
+pos = sapply(ip, function(h) {
+                   r = GeoIP_record_by_addr(db, h, returnInputs = FALSE)
+                   if(isNilPointer(r))
+                     c(NA, NA)
+                   else
+                     r[c("longitude", "latitude")]
+                  })
+</r:code>
+
+If we process all of the lines in omegahat.log.gz,
+we end up with 265782 unique IP addresses.
+If we time the sapply() loop below to get the locations,
+this takes 
+<r:output><![CDATA[
+    user   system  elapsed 
+1262.574   17.274 1425.822 
+]]></r:output>
+to process them all or 0.005 seconds 
+per IP address.
+There are 21 that cannot be matched.
+
+<r:code>
+i = which(is.na(pos[1,]))
+ip[i]
+</r:code>
+
+
+<r:plot><![CDATA[
+ library(maps)
+ map()
+ points(t(pos)[, c(1, 2)], pch = ".", col = "red")
+]]></r:plot>
+
+
+</para>
+
+
+</section>
+
+<section eval="false">
+<para>
+We can use the <r:pkg>Rffi</r:pkg> package to create the CIF object describing this type of routine
+and then invoke it.
+
+<r:code>
+library(Rffi)
+GeoIP_new = CIF(pointerType, list(sint32Type))
+</r:code>
+
+
+<r:code>
+ip.opts = resolveType(enums$GeoIPOptions, tu)
+</r:code>
+
+
+Let's skip over the details of the bitwise enumeration for the present
+and we'll use the value of GEOIP_STANDARD:
+
+<r:code>
+GEOIP_STANDARD = ip.opts@values["GEOIP_STANDARD"]
+</r:code>
+
+
+<r:code>
+dyn.load("/usr/local/lib/libGeoIP.dylib")
+</r:code>
+
+
+So now we can call GeoIP_new
+
+<r:code>
+ipDB = callCIF(GeoIP_new, "GeoIP_new", GEOIP_STANDARD)
+</r:code>
+We probably want to define a class "GeoIP" and 
+identify this pointer as an instance of this class
+
+<r:code>
+setClass("RCReference", representation(ref = "externalptr"))
+setClass("GeoIP", contains = "RCReference")
+</r:code>
+
+
+<r:code>
+ipDB = new("GeoIP", ref = ipDB)
+</r:code>
+
+</para>
+<para>
+
+Let's interface to the GeoIP_database_info and
+GeoIP_database_edition routines to check things are okay.
+
+<r:code>
+GeoIP_database_info = CIF(stringType, list(pointerType), FALSE)
+GeoIP_database_edition = CIF(uint32Type, list(pointerType), FALSE)
+</r:code>
+
+
+<r:code>
+callCIF(GeoIP_database_info, "GeoIP_database_info", ipDB@ref)
+callCIF(GeoIP_database_edition, "GeoIP_database_edition", ipDB@ref)
+</r:code>
+
+</para>
+
+<para>
+Now let's see about calling
+GeoIP_id_by_addr or GeoIP_id_by_name.
+These have the same signature so we can use the same CIF.
+<r:code>
+int.GeoIP_String = CIF(sint32Type, list(pointerType, stringType), c(FALSE, FALSE))
+</r:code>
+Then we can call this with
+<r:code eval="false">
+callCIF(int.GeoIP_String, "GeoIP_id_by_addr", ipDB@ref, "74.125.45.100")
+</r:code>
+
+<ignore>
+GeoIP_name_by_addr or GeoIP_name_by_name.
+These have the same signature so we can use the same CIF.
+
+<r:code>
+GeoIPString = CIF(stringType, list(pointerType, stringType))
+</r:code>
+
+<!-- This crashes because of the wrong database. -->
+<r:code eval="false">
+callCIF(GeoIPString, "GeoIP_name_by_addr", ipDB@ref, "74.125.45.100")
+</r:code>
+</ignore>
+
+</para>
+<para>
+Now let's look at the routine GeoIP_country_name_by_addr.
+This takes a GeoIP pointer and a string
+and returns a string. So we define the CIF as
+<r:code>
+GeoIPString = CIF(stringType, list(pointerType, stringType))
+</r:code>
+
+Now we can use this to call the routine
+
+<r:code>
+callCIF(GeoIPString, "GeoIP_country_name_by_addr", ipDB@ref, "74.125.45.100")$value
+</r:code>
+
+
+</para>
+
+</section>
+
+<section>
+<title>Data Structures</title>
+
+<para>
+Let's look at  GeoIP_region_by_addr.
+This returns a pointer to a GeoIPRegion object.
+This is a struct containing two elements,
+both strings of a fixed length 3, i.e. char [3].
+We can create the CIF as
+
+<r:code>
+GeoIPRegion.GeoIP_string = CIF(pointerType, list(pointerType, stringType))
+</r:code>
+
+This will allow us to call the routine and get the pointer to the GeoIPRegion.
+
+<r:code>
+ans = callCIF(GeoIPRegion.GeoIP_string, "GeoIP_region_by_addr", ipDB@ref, "74.125.45.100")
+</r:code>
+
+Now we have to be able to identify the fields in the pointer to the structure.
+We can manually examine the fields or we can use RGCCTranslationUnit to identify
+them.
+<r:code>
+ds = getDataStructures(tu)
+geoDS = ds[ grep("^GeoIP", names(ds), value = TRUE) ]
+reg = resolveType(resolveType(geoDS[["GeoIPRegion"]], tu))
+</r:code>
+
+We can extract the fields and their types.
+The names are obtained via
+<r:code>
+names(reg@fields)
+</r:code>
+
+The type of the first element is
+
+<r:code>
+reg@fields[[1]]@type
+</r:code>
+and this is an ArrayType. It contains the  length and
+element type of the array.
+</para>
+</section>
+
+</article>

@@ -1,0 +1,19 @@
+\name{GeoIP_time_zone_by_country_and_region}
+
+\alias{GeoIP_time_zone_by_country_and_region}
+
+\title{An interface to the native routine GeoIP_time_zone_by_country_and_region}
+
+\description{This function allows one to invoke the native routine GeoIP_time_zone_by_country_and_region from R, passing R values as arguments to the routine.}
+
+\arguments{
+\item{x1}{an object of class \code{\link{character-class}}}
+\item{x2}{an object of class \code{\link{character-class}}}
+\item{.cif}{the call interface object describing the signature of the native routine}
+\item{\dots}{additional parameters that are passed to \code{\link[Rffi]{callCIF}}}}
+
+\value{the native routine returns an object of class character. }
+
+\keyword{programming}
+
+\keyword{interface}

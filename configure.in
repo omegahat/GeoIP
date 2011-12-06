@@ -1,0 +1,79 @@
+AC_INIT(R/RGeoIP.R)
+
+AC_ARG_WITH(dll, [the path of the DLL/DSO file for the compiled GeoIP code],
+              GEOIP_DLL="${withval}")
+
+AC_ARG_WITH(data, [the path of the GeoIP lite database file],
+              GEOIP_DATA="${withval}")
+
+OS=`uname`
+
+case $OS in
+Darwin)
+   DSO_EXT="dylib" ;;
+Linux) 
+   DSO_EXT="so" ;;
+esac
+
+echo "OS = $OS, DSO_EXT = $DSO_EXT"
+
+if test -z "${GEOIP_DLL}"  ; then
+  echo "Looking for GeoIP DSO/DLL. Set it with the environment variable GEOIP_DLL"
+
+  for dir in /usr/local/lib /usr/lib ; do
+     if test -r "$dir/libGeoIP.${DSO_EXT}" ; then
+        GEOIP_DLL="$dir/libGeoIP.${DSO_EXT}"
+        echo "Found the DLL at $GEOIP_DLL"
+        break
+     fi
+  done
+fi
+
+DATA_FILE_NAME="GeoLiteCity.dat"
+if test -z "${GEOIP_DATA}"  ; then
+  for dir in /usr/local/share/GeoIP /usr/share/GeoIP $HOME/Downloads ; do
+     TMP="$dir/$DATA_FILE_NAME"
+     if test -r $TMP ; then
+       GEOIP_DATA="$TMP"
+      fi
+  done
+else 
+  if test -d "$GEOIP_DATA" ; then
+     if -r "$GEOIP_DATA/$DAT_FILE_NAME" ; then
+        GEOIP_DATA="$GEOIP_DATA/$DATA_FILE_NAME"
+     fi
+  fi
+fi
+
+if test -z "${GEOIP_DATA}"  ; then
+  GEOIP_DATA=NA
+else
+   if ! test -r "$GEOIP_DATA" ; then
+      echo "The database file does not seem to be readable. Make certain to install it at $GEOIP_DATA before using this package."
+   fi 
+   GEOIP_DATA="\"$GEOIP_DATA\""
+fi
+
+if test -z "${GEOIP_DLL}"  ; then
+  GEOIP_DLL=NA
+else
+   if ! test -r "$GEOIP_DLL" ; then
+     echo "Cannot currently read the DSO $GEOIP_DLL. Make certain to install it before using the package."
+   fi
+   GEOIP_DLL="\"$GEOIP_DLL\""
+fi
+
+
+
+
+
+echo "************"
+echo " GEOIP_DLL = $GEOIP_DLL"
+echo " GEOIP_DATA = $GEOIP_DATA"
+echo "************"
+
+AC_SUBST(GEOIP_DLL)
+AC_SUBST(GEOIP_DATA)
+
+
+AC_OUTPUT(R/config.R)
